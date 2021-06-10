@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'polls.apps.PollsConfig',
     'accounts.apps.AccountsConfig',
+    'api.apps.ApiConfig',
 ]
 
 MIDDLEWARE = [
