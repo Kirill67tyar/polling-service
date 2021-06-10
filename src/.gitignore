@@ -27,6 +27,7 @@ admin
 *.so
 
 tz.txt
+user_data.txt
 # Distribution / packaging
 .Python
 build/
