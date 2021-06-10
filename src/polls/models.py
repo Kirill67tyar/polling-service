@@ -1,10 +1,13 @@
 # from django.db import models
 from django.conf import settings
+from django.utils.text import slugify
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.db.models import (Model, CharField, SlugField, TextField,
                               DateTimeField, BooleanField, PositiveIntegerField,
-                              ForeignKey, OneToOneField, ManyToManyField, CASCADE, )
+                              ForeignKey, ManyToManyField, CASCADE, )
+
+from polls.utils import my_custom_slugify
 
 User = settings.AUTH_USER_MODEL
 
@@ -30,17 +33,22 @@ class Poll(Model):
     def __str__(self):
         return self.title
 
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(my_custom_slugify(str(self.title)))
+        return super(Poll, self).save(*args, **kwargs)
+
 
 class Question(Model):
     CHOICES = (
-        ('text', 'Text',),
-        ('radio', 'Radio',),
-        ('checkbox', 'Checkbox',),
+        ('text', 'Text',),  # 1
+        ('radio', 'Radio',),  # 2
+        ('checkbox', 'Checkbox',),  # 3
     )
     poll = ForeignKey(to=Poll,
                       on_delete=CASCADE,
                       related_name='questions',
-                      verbose_name='Вопрос')
+                      verbose_name='Опрос')
     title = CharField(max_length=255, db_index=True, verbose_name='Вопрос')
     type_question = CharField(max_length=8,
                               choices=CHOICES,
@@ -64,8 +72,11 @@ class Choice(Model):
                           verbose_name='Вопрос')
     title = CharField(max_length=255, db_index=True, verbose_name='Вариант ответа')
 
+    def __str__(self):
+        return self.title
 
-# Разные стратегии, как альтернатива GenericForeignKey:
+
+# Разные стратегии, как альтернатива для GenericForeignKey:
 # https://djbook.ru/examples/88/
 class Answer(Model):
     question = ForeignKey(to=Question,
@@ -79,7 +90,7 @@ class Answer(Model):
     anonymous = BooleanField(default=False, verbose_name='Аноним')
     text = TextField(blank=True, null=True)
     radio = ForeignKey(to=Choice, on_delete=CASCADE, blank=True, null=True)
-    checkbox = ManyToManyField(to=Choice, related_name='checkbox_answers', blank=True, null=True)
+    checkbox = ManyToManyField(to=Choice, related_name='checkbox_answers', blank=True)
 
     class Meta:
         verbose_name = 'Ответ'
