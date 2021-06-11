@@ -31,6 +31,8 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+INTERNAL_IPS = ['127.0.0.1', ]
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -40,6 +42,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'debug_toolbar',
     'rest_framework',
     'polls.apps.PollsConfig',
     'accounts.apps.AccountsConfig',
@@ -47,6 +50,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'debug_toolbar.middleware.DebugToolbarMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -109,7 +113,7 @@ AUTH_USER_MODEL = 'accounts.MyUser'
 # Internationalization
 # https://docs.djangoproject.com/en/3.2/topics/i18n/
 
-LANGUAGE_CODE = 'ru-ru'#'en-us'
+LANGUAGE_CODE = 'ru-ru'  # 'en-us'
 
 TIME_ZONE = 'UTC'
 
@@ -122,9 +126,32 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/3.2/howto/static-files/
 
+# -------------------------------------------------------- STATIC settings
+
 STATIC_URL = '/static/'
+
+# здесь мы указываем откуда будем доставать статику и подключать к шаблону,
+# с помощью тега {% static 'css/style.css' %}
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static'),
+]
+
+# здесь мы указываем куда django будет собирать всю статику проекта при команде collectstatic
+# на самом деле это основная папка, от куда берется статика проекта
+# и должна называться они staticfiles
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles/')
+# -------------------------------------------------------- STATIC settings
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/3.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+def show_toolbar(request):
+    return True
+
+
+DEBUG_TOOLBAR_CONFIG = {
+    "SHOW_TOOLBAR_CALLBACK": show_toolbar,
+}

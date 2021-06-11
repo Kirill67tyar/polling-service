@@ -1,3 +1,6 @@
+from django.db.models.query import QuerySet
+from django.db.models.manager import BaseManager
+
 cyrillic_letters = {
     u'а': u'a',
     u'б': u'b',
@@ -36,15 +39,12 @@ cyrillic_letters = {
 }
 
 
-
 def my_custom_slugify(text: str):
     text = text.replace(' ', '-')
     slug = ''
     for char in text:
         slug += cyrillic_letters.get(char, char)
     return slug
-
-
 
 
 def get_view_at_console(obj, delimiter='*', unpack=False, sep='\n'):
@@ -96,3 +96,9 @@ def get_view_at_console1(obj, delimiter='*', unpack=False, dictionary=False, fin
         args.insert(1, delimiter)
         args.insert(-1, delimiter)
     return print(*args, sep='\n')
+
+
+def get_object_or_null(model, **kwargs):
+    if isinstance(model, QuerySet) or isinstance(model, BaseManager):
+        return model.filter(**kwargs).first()
+    return model.objects.filter(**kwargs).first()
