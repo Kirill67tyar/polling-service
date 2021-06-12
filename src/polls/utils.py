@@ -79,16 +79,13 @@ def get_view_at_console1(obj, delimiter='*', unpack=False, dictionary=False, fin
 
     name = getattr(obj, '__name__') + ' :' if hasattr(obj, '__name__') else ''
     if unpack:
-        if issubclass(type(obj), dict):
-            args = [sep, name, *obj.items(), sep]
-        else:
-            args = [sep, name, *dir(obj), sep]
+        args = [sep, name, *dir(obj), sep]
     elif dictionary:
         args = [sep, name, *obj.items(), sep]
     elif find_type:
         args = [sep, name, type(obj), sep]
     elif find_mro:
-        args = [sep, name, obj.mro(), sep]
+        args = [sep, name, type(obj).mro(), sep]
     else:
         args = [sep, name, obj, sep]
     if delimiter:

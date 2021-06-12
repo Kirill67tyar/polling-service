@@ -39,6 +39,7 @@ class QuestionModelSerializer(ModelSerializer):
 
     def get_complete_question(self, obj):
         request = self.context['request']
+
         return request.build_absolute_uri(reverse_lazy('api:question_detail',
                                                        kwargs={'poll_id': obj.poll.pk,
                                                                'pk': obj.pk, }))
@@ -68,8 +69,14 @@ class QuestionModelSerializer(ModelSerializer):
         fields = ('id', 'title', 'type_question', 'complete_question', 'choices',)
 
 
+class ThinQuestionModelSerializer(ModelSerializer):
+    class Meta:
+        model = Question
+        fields = ('id', 'title', 'type_question',)
+
+
 class ThinPollModelSerializer(ModelSerializer):
-    url = HyperlinkedIdentityField(view_name='api:poll_detail')
+    update_poll = HyperlinkedIdentityField(view_name='api:poll_detail')
     quantity_questions = SerializerMethodField(read_only=True)
 
     def get_quantity_questions(self, obj):
@@ -82,19 +89,24 @@ class ThinPollModelSerializer(ModelSerializer):
 
     class Meta:
         model = Poll
-        fields = ('id', 'title', 'owner', 'quantity_questions', 'url',)
+        fields = ('id', 'title', 'owner', 'quantity_questions', 'update_poll',)
 
 
 class PollModelSerializer(ModelSerializer):
+    questions = ThinQuestionModelSerializer(many=True, read_only=True)
     owner = SerializerMethodField(read_only=True)
-    questions_for_this_poll = SerializerMethodField(read_only=True)
+    add_question = SerializerMethodField(read_only=True)
+    slug = SerializerMethodField(read_only=True)
 
     def get_owner(self, obj):
         return obj.owner.email
 
-    def get_questions_for_this_poll(self, obj):
+    def get_add_question(self, obj):
         request = self.context['request']
         return request.build_absolute_uri(reverse_lazy('api:questions_list', kwargs={'poll_id': obj.pk, }))
+
+    def get_slug(self, obj):
+        return obj.slug
 
     class Meta:
         model = Poll
@@ -107,7 +119,8 @@ class PollModelSerializer(ModelSerializer):
                   'end_date',
                   'created',
                   # 'active',
-                  'questions_for_this_poll',
+                  'add_question',
+                  'questions',
                   )
 
 
