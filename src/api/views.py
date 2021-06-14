@@ -13,12 +13,11 @@ from rest_framework.generics import (ListCreateAPIView,
 from django.urls import reverse
 from django.views.generic import ListView, CreateView
 
-from polls.utils import get_view_at_console1, get_object_or_null
 from polls.models import (Poll, Question, Choice, Answer, )
-from api.serializers import (ThinPollModelSerializer,
-                             PollModelSerializer,
-                             QuestionModelSerializer,
-                             ChoiceModelSerializer, )
+from polls.utils import get_view_at_console1, get_object_or_null
+from api.permissions import IsOwnerOrAdmin, StartDateNotCreatedOrReadOnly
+from api.serializers import (ThinPollModelSerializer, PollModelSerializer,
+                             QuestionModelSerializer, ChoiceModelSerializer, )
 
 
 def experiments(self):
@@ -38,7 +37,7 @@ class PollsListAPIView(ListCreateAPIView):
     queryset = Poll.objects.all()
     serializer_class = PollModelSerializer
     authentication_classes = (BasicAuthentication,)
-    permission_classes = (IsAdminUser,)
+    permission_classes = (IsOwnerOrAdmin,)
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -61,7 +60,7 @@ class PollDetailAPIView(RetrieveUpdateDestroyAPIView):
     queryset = Poll.objects.all()
     serializer_class = PollModelSerializer
     authentication_classes = (BasicAuthentication,)
-    permission_classes = (IsAdminUser,)
+    permission_classes = (IsOwnerOrAdmin,)
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -73,7 +72,8 @@ class QuestionsListAPIView(ListCreateAPIView):
     queryset = Question.objects.all()
     serializer_class = QuestionModelSerializer
     authentication_classes = (BasicAuthentication,)
-    permission_classes = (IsAdminUser,)
+    permission_classes = (IsOwnerOrAdmin, StartDateNotCreatedOrReadOnly,)
+
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -82,6 +82,7 @@ class QuestionsListAPIView(ListCreateAPIView):
         return qs.filter(poll_id=poll_id, poll__owner=self.request.user)
 
     def perform_create(self, serializer):
+        get_view_at_console1(serializer.validated_data, unpack=0, delimiter='+')
         serializer.save(poll_id=self.kwargs['poll_id'])
 
 
@@ -89,7 +90,7 @@ class QuestionDetailAPIView(RetrieveUpdateDestroyAPIView):
     queryset = Question.objects.all()
     serializer_class = QuestionModelSerializer
     authentication_classes = (BasicAuthentication,)
-    permission_classes = (IsAdminUser,)
+    permission_classes = (IsOwnerOrAdmin, StartDateNotCreatedOrReadOnly,)
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -102,7 +103,7 @@ class ChoiceModelViewSet(ModelViewSet):
     queryset = Choice.objects.all()
     serializer_class = ChoiceModelSerializer
     authentication_classes = (BasicAuthentication,)
-    permission_classes = (IsAdminUser,)
+    permission_classes = (IsOwnerOrAdmin, StartDateNotCreatedOrReadOnly,)
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -128,6 +129,7 @@ class ChoiceModelViewSet(ModelViewSet):
     #         #         "No URL to redirect to.  Either provide a url or define"
     #         #         " a get_absolute_url method on the Model.")
     #     return url
+
 
 """
 ограничение в изменении если start_date создан будем делать в кастомном пермишинсе

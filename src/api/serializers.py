@@ -39,24 +39,28 @@ class QuestionModelSerializer(ModelSerializer):
 
     def get_complete_question(self, obj):
         request = self.context['request']
-
-        return request.build_absolute_uri(reverse_lazy('api:question_detail',
-                                                       kwargs={'poll_id': obj.poll.pk,
-                                                               'pk': obj.pk, }))
+        if isinstance(obj, Question):
+            return request.build_absolute_uri(reverse_lazy('api:question_detail',
+                                                           kwargs={'poll_id': obj.poll.pk,
+                                                                   'pk': obj.pk, }))
+        return None
 
     def get_choices(self, obj):
-        if obj.type_question in ('radio', 'checkbox',):
-            return list(obj.choices.values())
-        return 'Variants cannot be added because the question type is text"'
+        if isinstance(obj, Question):
+            if obj.type_question in ('radio', 'checkbox',):
+                return list(obj.choices.values())
+            return 'Variants cannot be added because the question type is text"'
+        return None
 
     # возвращает OrderedDict одного instance
     # который будет рендериться
     def to_representation(self, instance):
         ret = super().to_representation(instance)
+        get_view_at_console1(ret, delimiter='N')
         type_question = ret['type_question']
         request = self.context['request']
         if type_question in ('radio', 'checkbox',):
-            pk = ret['id']
+            pk = ret.get('id')
             question = get_object_or_null(Question, pk=pk)
             if question:
                 ret['add_choice'] = request.build_absolute_uri(reverse_lazy('api:question_detail_choice_list',

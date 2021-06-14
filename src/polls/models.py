@@ -38,7 +38,11 @@ class Poll(Model):
             self.slug = slugify(my_custom_slugify(str(self.title)))
         return super(Poll, self).save(*args, **kwargs)
 
-
+"""
+возможно здесь придется переписать type_question чтобы был обычный CharField. 
+А дальше на уровне сохранения serializer(create) если не checkbox/radio/text
+то сохранять type_question как text
+"""
 class Question(Model):
     CHOICES = (
         ('text', 'Text',),  # 1
