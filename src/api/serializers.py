@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from rest_framework.reverse import reverse_lazy
 from rest_framework.fields import SerializerMethodField
 from rest_framework.relations import HyperlinkedIdentityField
@@ -13,100 +14,123 @@ from polls.models import (Poll, Question, Choice, Answer)
 # !!! когда будешь пилить сериализаторы для user прочти статью:
 # https://www.django-rest-framework.org/api-guide/fields/#choice-selection-fields
 
-class ChoiceModelSerializer(ModelSerializer):
-    update_choice = SerializerMethodField(read_only=True)
-    question = SerializerMethodField(read_only=True)
 
-    def get_update_choice(self, obj):
+# ----------------  CHOICES
+class ThinChoiceModelSerializer(ModelSerializer):
+    choice_detail = SerializerMethodField(read_only=True)
+
+    def get_choice_detail(self, obj):
         request = self.context['request']
-        return request.build_absolute_uri(reverse_lazy('api:question_detail_choice_detail',
-                                                       kwargs={'poll_id': obj.question.poll.pk,
-                                                               'question_id': obj.question.pk,
+        relative_url = request.get_full_path_info().split('/')
+        poll_id = relative_url[3]
+        question_id = relative_url[5]
+        return request.build_absolute_uri(reverse_lazy('api:choice_detail',
+                                                       kwargs={'poll_id': poll_id,
+                                                               'question_id': question_id,
                                                                'pk': obj.pk, }))
+
+    class Meta:
+        model = Choice
+        fields = ('pk', 'title', 'choice_detail',)
+
+
+class ChoiceModelSerializer(ModelSerializer):
+    question = SerializerMethodField(read_only=True)
+    poll_id = SerializerMethodField(read_only=True)
 
     def get_question(self, obj):
         return str(obj.question)
 
+    def get_poll_id(self, obj):
+        request = self.context['request']
+        return request.get_full_path_info().split('/')[5]
+
     class Meta:
         model = Choice
-        fields = ('id', 'question', 'title', 'update_choice',)
+        fields = ('id', 'title', 'question', 'poll_id',)
 
 
-class QuestionModelSerializer(ModelSerializer):
-    complete_question = SerializerMethodField(read_only=True)
+# ----------------  QUESTIONS
+class ThinQuestionModelSerializer(ModelSerializer):
+    question_detail = SerializerMethodField(read_only=True)
 
-    choices = SerializerMethodField(read_only=True)
-
-    def get_complete_question(self, obj):
+    def get_question_detail(self, obj):
         request = self.context['request']
+        relative_url = request.get_full_path_info().split('/')
+        poll_id = relative_url[3]
         if isinstance(obj, Question):
             return request.build_absolute_uri(reverse_lazy('api:question_detail',
-                                                           kwargs={'poll_id': obj.poll.pk,
+                                                           kwargs={'poll_id': poll_id,  # obj.poll.pk,
                                                                    'pk': obj.pk, }))
         return None
 
-    def get_choices(self, obj):
-        if isinstance(obj, Question):
-            if obj.type_question in ('radio', 'checkbox',):
-                return list(obj.choices.values())
-            return 'Variants cannot be added because the question type is text"'
-        return None
+    class Meta:
+        model = Question
+        fields = ('id', 'title', 'type_question', 'question_detail',)
+
+
+class QuestionModelSerializer(ModelSerializer):
+    poll_id = SerializerMethodField(read_only=True)
+
+    # choices = ThinChoiceModelSerializer(many=True, read_only=True)
+
+    def take_poll_id(self):
+        request = self.context['request']
+        return request.get_full_path_info().split('/')[5]
+
+    def get_poll_id(self, obj):
+        return obj.poll.pk
 
     # возвращает OrderedDict одного instance
     # который будет рендериться
     def to_representation(self, instance):
         ret = super().to_representation(instance)
-        get_view_at_console1(ret, delimiter='N')
+        # get_view_at_console1(ret, delimiter='N')
         type_question = ret['type_question']
         request = self.context['request']
         if type_question in ('radio', 'checkbox',):
             pk = ret.get('id')
-            question = get_object_or_null(Question, pk=pk)
-            if question:
-                ret['add_choice'] = request.build_absolute_uri(reverse_lazy('api:question_detail_choice_list',
-                                                                            kwargs={'poll_id': question.poll.pk,
-                                                                                    'question_id': question.pk, }))
+            relative_url = request.get_full_path_info().split('/')
+            poll_id = relative_url[3]
+            ret['choices_list'] = request.build_absolute_uri(reverse_lazy('api:choices_list',
+                                                                          kwargs={'poll_id': poll_id,
+                                                                                  'question_id': pk, }))
         return ret
 
     class Meta:
         model = Question
-        fields = ('id', 'title', 'type_question', 'complete_question', 'choices',)
+        fields = ('id', 'poll_id', 'title', 'type_question',)  # 'choices',)
 
 
-class ThinQuestionModelSerializer(ModelSerializer):
-    class Meta:
-        model = Question
-        fields = ('id', 'title', 'type_question',)
-
-
+# ----------------  POLLS
 class ThinPollModelSerializer(ModelSerializer):
-    update_poll = HyperlinkedIdentityField(view_name='api:poll_detail')
+    poll_detail = HyperlinkedIdentityField(view_name='api:poll_detail')
     quantity_questions = SerializerMethodField(read_only=True)
+    owner = SerializerMethodField(read_only=True)
 
     def get_quantity_questions(self, obj):
         return obj.questions.count()
-
-    owner = SerializerMethodField(read_only=True)
 
     def get_owner(self, obj):
         return obj.owner.email
 
     class Meta:
         model = Poll
-        fields = ('id', 'title', 'owner', 'quantity_questions', 'update_poll',)
+        fields = ('id', 'title', 'owner', 'quantity_questions', 'poll_detail',)
 
 
 class PollModelSerializer(ModelSerializer):
     questions = ThinQuestionModelSerializer(many=True, read_only=True)
     owner = SerializerMethodField(read_only=True)
-    add_question = SerializerMethodField(read_only=True)
+    questions_list = SerializerMethodField(read_only=True)
     slug = SerializerMethodField(read_only=True)
 
     def get_owner(self, obj):
         return obj.owner.email
 
-    def get_add_question(self, obj):
+    def get_questions_list(self, obj):
         request = self.context['request']
+        relative_url = request.get_full_path_info().split('/')
         return request.build_absolute_uri(reverse_lazy('api:questions_list', kwargs={'poll_id': obj.pk, }))
 
     def get_slug(self, obj):
@@ -123,9 +147,48 @@ class PollModelSerializer(ModelSerializer):
                   'end_date',
                   'created',
                   # 'active',
-                  'add_question',
+                  'questions_list',
                   'questions',
                   )
+
+
+# ----------------  USERS
+class UserSerializer(ModelSerializer):
+    # polls_list_second = HyperlinkedIdentityField(view_name='api:polls_list')
+    polls_list = SerializerMethodField(read_only=True)
+
+    def get_polls_list(self, obj):
+        request = self.context['request']
+        return request.build_absolute_uri(reverse_lazy('api:polls_list'))
+
+    class Meta:
+        model = get_user_model()
+        queryset = model.objects.all()
+        fields = 'id', 'email', 'password', 'name', 'admin',  # 'polls_list_second',
+        extra_kwargs = {'password': {'write_only': True, }, }
+
+    def create(self, validated_data):
+        password = validated_data.pop('password', '')
+        user = self.Meta.model(**validated_data)
+        user.set_password(password)
+        user.save()
+        return user
+
+    def update(self, instance, validated_data):
+        instance.set_password(validated_data.pop('password', ''))
+        return super().update(instance, validated_data)
+
+
+class ThinUserSerializers(ModelSerializer):
+    user_detail = SerializerMethodField(read_only=True)
+
+    def get_user_detail(self, obj):
+        request = self.context['request']
+        return request.build_absolute_uri(reverse_lazy('api:user_detail'), kwargs={'pk': obj.pk})
+
+    class Meta:
+        model = get_user_model()
+        fields = 'id', 'email', 'is_active', 'polls_list',
 
 
 """

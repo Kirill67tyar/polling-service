@@ -17,7 +17,8 @@ from polls.models import (Poll, Question, Choice, Answer, )
 from polls.utils import get_view_at_console1, get_object_or_null
 from api.permissions import IsOwnerOrAdmin, StartDateNotCreatedOrReadOnly
 from api.serializers import (ThinPollModelSerializer, PollModelSerializer,
-                             QuestionModelSerializer, ChoiceModelSerializer, )
+                             ThinQuestionModelSerializer, QuestionModelSerializer,
+                             ChoiceModelSerializer, ThinChoiceModelSerializer, )
 
 
 def experiments(self):
@@ -34,19 +35,22 @@ def experiments(self):
 
 
 class PollsListAPIView(ListCreateAPIView):
-    queryset = Poll.objects.all()
+    model = Poll
+    queryset = model.objects.none()
     serializer_class = PollModelSerializer
     authentication_classes = (BasicAuthentication,)
     permission_classes = (IsOwnerOrAdmin,)
 
+    # permission_classes = (IsAdminUser,)
+
     def get_queryset(self):
-        qs = super().get_queryset()
-        owner = self.request.user
-        return qs.filter(owner=owner)
+        user = self.request.user
+        if user.is_admin:
+            return self.model.objects.all()
+        return self.model.objects.filter(owner=user)  # .select_related('questions')
 
     def list(self, request, *args, **kwargs):
-        owner = request.user
-        polls = Poll.objects.filter(owner=owner)  # .select_related('questions')
+        polls = self.get_queryset()
         context = {'request': request, }
         serializer = ThinPollModelSerializer(instance=polls, many=True, context=context)
         # experiments(serializer.data)
@@ -62,23 +66,17 @@ class PollDetailAPIView(RetrieveUpdateDestroyAPIView):
     authentication_classes = (BasicAuthentication,)
     permission_classes = (IsOwnerOrAdmin,)
 
-    def get_queryset(self):
-        qs = super().get_queryset()
-        owner = self.request.user
-        return qs.filter(owner=owner)
-
 
 class QuestionsListAPIView(ListCreateAPIView):
     queryset = Question.objects.all()
-    serializer_class = QuestionModelSerializer
+    serializer_class = ThinQuestionModelSerializer
     authentication_classes = (BasicAuthentication,)
     permission_classes = (IsOwnerOrAdmin, StartDateNotCreatedOrReadOnly,)
-
 
     def get_queryset(self):
         qs = super().get_queryset()
         poll_id = self.kwargs['poll_id']
-        qs = qs.select_related('poll', 'poll__owner')
+        qs = qs.select_related('poll', 'poll__owner').prefetch_related('choices')
         return qs.filter(poll_id=poll_id, poll__owner=self.request.user)
 
     def perform_create(self, serializer):
@@ -105,6 +103,11 @@ class ChoiceModelViewSet(ModelViewSet):
     authentication_classes = (BasicAuthentication,)
     permission_classes = (IsOwnerOrAdmin, StartDateNotCreatedOrReadOnly,)
 
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return ThinChoiceModelSerializer
+        return ChoiceModelSerializer
+
     def get_queryset(self):
         qs = super().get_queryset()
         question_id = self.kwargs['question_id']
@@ -112,25 +115,3 @@ class ChoiceModelViewSet(ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(question_id=self.kwargs['question_id'])
-
-    # def get_success_url(self):
-    #     """Return the URL to redirect to after processing a valid form."""
-    #     if self.success_url:
-    #         url = self.success_url.format(**self.object.__dict__)
-    #     else:
-    #         # url = reverse_lazy('api:question_detail', kwargs={'poll_id': self.object.question.poll_id,
-    #         #                                                   'pk': self.object.question_pk})
-    #         url = reverse('api:question_detail', kwargs={'poll_id': self.kwargs['poll_id'],
-    #                                                           'pk': self.object.kwargs['pk']})
-    #         # try:
-    #         #     url = self.object.get_absolute_url()
-    #         # except AttributeError:
-    #         #     raise ImproperlyConfigured(
-    #         #         "No URL to redirect to.  Either provide a url or define"
-    #         #         " a get_absolute_url method on the Model.")
-    #     return url
-
-
-"""
-ограничение в изменении если start_date создан будем делать в кастомном пермишинсе
-"""

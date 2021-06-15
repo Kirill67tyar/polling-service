@@ -21,6 +21,8 @@ for_one_element = {
 }
 
 urlpatterns = [
+    path('users/', PollsListAPIView.as_view(), name='users_list'),
+    path('users/<int:pk>/', PollsListAPIView.as_view(), name='user_detail'),
     path('polls/', PollsListAPIView.as_view(), name='polls_list'),
     path('polls/<int:pk>/', PollDetailAPIView.as_view(), name='poll_detail'),
     path('polls/<int:poll_id>/questions/', QuestionsListAPIView.as_view(), name='questions_list'),
@@ -29,8 +31,8 @@ urlpatterns = [
          name='question_detail'),
     path('polls/<int:poll_id>/questions/<int:question_id>/choices/',
          ChoiceModelViewSet.as_view(for_many_elements),
-         name='question_detail_choice_list'),
+         name='choices_list'),
     path('polls/<int:poll_id>/questions/<int:question_id>/choices/<int:pk>/',
          ChoiceModelViewSet.as_view(for_one_element),
-         name='question_detail_choice_detail'),
+         name='choice_detail'),
 ]

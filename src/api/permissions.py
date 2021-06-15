@@ -6,8 +6,8 @@ from polls.models import Poll, Question, Choice
 
 class IsOwnerOrAdmin(BasePermission):
 
-    # def has_permission(self, request, view):
-    #     return bool(request.user and request.user.is_staff)
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_staff)
 
     def has_object_permission(self, request, view, obj):
         user = request.user
@@ -23,6 +23,7 @@ class IsOwnerOrAdmin(BasePermission):
                     return request.method in SAFE_METHODS
             else:
                 return user.is_admin
+        return False
 
 
 class StartDateNotCreatedOrReadOnly(BasePermission):
@@ -38,12 +39,9 @@ class StartDateNotCreatedOrReadOnly(BasePermission):
             )
 
     def has_object_permission(self, request, view, obj):
-        # get_view_at_console1(view)
-        if request.method in SAFE_METHODS:
-            return True
-        # return False
-        elif isinstance(obj, Question):
+        if isinstance(obj, Question):
             return not obj.poll.start_date
         elif isinstance(obj, Choice):
             return not obj.question.poll.start_date
-        return False
+        return request.method in SAFE_METHODS
+        # return self.has_permission(request, view)
