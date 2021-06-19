@@ -1,10 +1,11 @@
 from django.urls import path
 
-from api.views import (PollsListAPIView,
+from api.views import (UserViewSet,
+                       PollsListAPIView,
                        PollDetailAPIView,
                        QuestionsListAPIView,
                        QuestionDetailAPIView,
-                       ChoiceModelViewSet, )
+                       ChoiceViewSet, )
 
 app_name = 'api'
 
@@ -21,8 +22,8 @@ for_one_element = {
 }
 
 urlpatterns = [
-    path('users/', PollsListAPIView.as_view(), name='users_list'),
-    path('users/<int:pk>/', PollsListAPIView.as_view(), name='user_detail'),
+    path('users/', UserViewSet.as_view(for_many_elements), name='users_list'),
+    path('users/<int:pk>/', UserViewSet.as_view(for_one_element), name='user_detail'),
     path('polls/', PollsListAPIView.as_view(), name='polls_list'),
     path('polls/<int:pk>/', PollDetailAPIView.as_view(), name='poll_detail'),
     path('polls/<int:poll_id>/questions/', QuestionsListAPIView.as_view(), name='questions_list'),
@@ -30,9 +31,9 @@ urlpatterns = [
          QuestionDetailAPIView.as_view(),
          name='question_detail'),
     path('polls/<int:poll_id>/questions/<int:question_id>/choices/',
-         ChoiceModelViewSet.as_view(for_many_elements),
+         ChoiceViewSet.as_view(for_many_elements),
          name='choices_list'),
     path('polls/<int:poll_id>/questions/<int:question_id>/choices/<int:pk>/',
-         ChoiceModelViewSet.as_view(for_one_element),
+         ChoiceViewSet.as_view(for_one_element),
          name='choice_detail'),
 ]

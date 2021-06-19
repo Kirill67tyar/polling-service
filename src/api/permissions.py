@@ -1,4 +1,4 @@
-from rest_framework.permissions import BasePermission, SAFE_METHODS
+from rest_framework.permissions import BasePermission, IsAdminUser, SAFE_METHODS
 
 from polls.utils import get_view_at_console1, get_object_or_null
 from polls.models import Poll, Question, Choice
@@ -45,3 +45,11 @@ class StartDateNotCreatedOrReadOnly(BasePermission):
             return not obj.question.poll.start_date
         return request.method in SAFE_METHODS
         # return self.has_permission(request, view)
+
+
+class MyIsAdminUser(IsAdminUser):
+    def has_permission(self, request, view):
+        permission = super().has_permission(request, view)
+        if permission:
+            return bool(request.user.is_admin)
+        return False

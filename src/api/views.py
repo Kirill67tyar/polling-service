@@ -3,6 +3,7 @@ from collections import OrderedDict
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.status import HTTP_200_OK
+from django.contrib.auth import get_user_model
 from rest_framework.reverse import reverse_lazy
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.permissions import IsAdminUser
@@ -11,12 +12,15 @@ from rest_framework.generics import (ListCreateAPIView,
                                      RetrieveUpdateDestroyAPIView,
                                      get_object_or_404, GenericAPIView)
 from django.urls import reverse
+from django.http import JsonResponse
 from django.views.generic import ListView, CreateView
 
 from polls.models import (Poll, Question, Choice, Answer, )
 from polls.utils import get_view_at_console1, get_object_or_null
-from api.permissions import IsOwnerOrAdmin, StartDateNotCreatedOrReadOnly
-from api.serializers import (ThinPollModelSerializer, PollModelSerializer,
+from api.permissions import (MyIsAdminUser, IsOwnerOrAdmin,
+                             StartDateNotCreatedOrReadOnly, )
+from api.serializers import (UserSerializer, ThinUserSerializers,
+                             ThinPollModelSerializer, PollModelSerializer,
                              ThinQuestionModelSerializer, QuestionModelSerializer,
                              ChoiceModelSerializer, ThinChoiceModelSerializer, )
 
@@ -32,6 +36,7 @@ def experiments(self):
     get_view_at_console1(self, delimiter='^', unpack=0, dictionary=0)
     get_view_at_console1(self, delimiter=':', unpack=0, dictionary=0, find_type=1)
     get_view_at_console1(self, delimiter='!', unpack=0, dictionary=0, find_mro=1)
+    return JsonResponse({'status': 'ok', })
 
 
 class PollsListAPIView(ListCreateAPIView):
@@ -97,7 +102,7 @@ class QuestionDetailAPIView(RetrieveUpdateDestroyAPIView):
         return qs.filter(pk=question_id, poll__owner=self.request.user)
 
 
-class ChoiceModelViewSet(ModelViewSet):
+class ChoiceViewSet(ModelViewSet):
     queryset = Choice.objects.all()
     serializer_class = ChoiceModelSerializer
     authentication_classes = (BasicAuthentication,)
@@ -115,3 +120,15 @@ class ChoiceModelViewSet(ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(question_id=self.kwargs['question_id'])
+
+
+class UserViewSet(ModelViewSet):
+    model = get_user_model()
+    queryset = model.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = (MyIsAdminUser,)
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return ThinUserSerializers
+        return UserSerializer

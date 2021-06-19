@@ -1,8 +1,12 @@
 from django.contrib.auth import get_user_model
+
+from rest_framework import serializers
+from rest_framework.response import Response
 from rest_framework.reverse import reverse_lazy
+from rest_framework.exceptions import ValidationError
 from rest_framework.fields import SerializerMethodField
 from rest_framework.relations import HyperlinkedIdentityField
-from rest_framework.serializers import ModelSerializer, Serializer
+from rest_framework.serializers import ModelSerializer, Serializer, CharField
 
 from polls.utils import get_view_at_console1, get_object_or_null
 from polls.models import (Poll, Question, Choice, Answer)
@@ -17,6 +21,7 @@ from polls.models import (Poll, Question, Choice, Answer)
 
 # ----------------  CHOICES
 class ThinChoiceModelSerializer(ModelSerializer):
+    # choice_detail = HyperlinkedIdentityField(view_name='api:choice_detail')
     choice_detail = SerializerMethodField(read_only=True)
 
     def get_choice_detail(self, obj):
@@ -130,7 +135,6 @@ class PollModelSerializer(ModelSerializer):
 
     def get_questions_list(self, obj):
         request = self.context['request']
-        relative_url = request.get_full_path_info().split('/')
         return request.build_absolute_uri(reverse_lazy('api:questions_list', kwargs={'poll_id': obj.pk, }))
 
     def get_slug(self, obj):
@@ -154,18 +158,20 @@ class PollModelSerializer(ModelSerializer):
 
 # ----------------  USERS
 class UserSerializer(ModelSerializer):
-    # polls_list_second = HyperlinkedIdentityField(view_name='api:polls_list')
-    polls_list = SerializerMethodField(read_only=True)
+    # password2 = CharField(required=True, write_only=True, label='Введите пароль еще раз',
+    #                       style={'input_type': 'password'})  # под вопросом. можно и без этого. тогда пароль будет виден
 
-    def get_polls_list(self, obj):
-        request = self.context['request']
-        return request.build_absolute_uri(reverse_lazy('api:polls_list'))
+    # style={'input_type': 'password'} - влияет только на type input формы от drf. устанавливает type="password"
 
     class Meta:
         model = get_user_model()
         queryset = model.objects.all()
-        fields = 'id', 'email', 'password', 'name', 'admin',  # 'polls_list_second',
-        extra_kwargs = {'password': {'write_only': True, }, }
+        fields = ('id', 'email', 'password', 'name', 'admin', 'staff', 'is_active',)  # 'password2'
+        extra_kwargs = {'password': {'write_only': True,
+                                     'style': {'input_type': 'password'}, }, }  # под вопросом. можно и без этого
+                                    # 'admin': {'read_only': True, },
+                                    # 'staff': {'read_only': True, },
+                                    # 'is_active': {'read_only': True, }, }
 
     def create(self, validated_data):
         password = validated_data.pop('password', '')
@@ -173,22 +179,33 @@ class UserSerializer(ModelSerializer):
         user.set_password(password)
         user.save()
         return user
+        # password2 = validated_data.pop('password2', '')
+        # if password == password2:
+        #     user = self.Meta.model(**validated_data)
+        #     user.set_password(password)
+        #     user.save()
+        #     return user
+        # else:
+        #     raise ValidationError('Пароли должны совпадать (Passwords must be identical)')
 
     def update(self, instance, validated_data):
-        instance.set_password(validated_data.pop('password', ''))
+        password = validated_data.pop('password', '')
+        instance.set_password(password)
         return super().update(instance, validated_data)
+        # password2 = validated_data.pop('password2', '')
+        # if password == password2:
+        #     instance.set_password(password)
+        #     return super().update(instance, validated_data)
+        # else:
+        #     raise ValidationError('Пароли должны совпадать (Passwords must be identical)')
 
 
 class ThinUserSerializers(ModelSerializer):
-    user_detail = SerializerMethodField(read_only=True)
-
-    def get_user_detail(self, obj):
-        request = self.context['request']
-        return request.build_absolute_uri(reverse_lazy('api:user_detail'), kwargs={'pk': obj.pk})
+    user_detail = HyperlinkedIdentityField(view_name='api:user_detail')
 
     class Meta:
         model = get_user_model()
-        fields = 'id', 'email', 'is_active', 'polls_list',
+        fields = ('id', 'email', 'is_active', 'user_detail',)
 
 
 """
