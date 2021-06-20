@@ -43,7 +43,7 @@ class PollsListAPIView(ListCreateAPIView):
     model = Poll
     queryset = model.objects.none()
     serializer_class = PollModelSerializer
-    authentication_classes = (BasicAuthentication,)
+    # authentication_classes = (BasicAuthentication,)
     permission_classes = (IsOwnerOrAdmin,)
 
     # permission_classes = (IsAdminUser,)
