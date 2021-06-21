@@ -40,7 +40,7 @@ cyrillic_letters = {
 
 
 def my_custom_slugify(text: str):
-    text = text.replace(' ', '-')
+    text = text.replace(' ', '-').lower()
     slug = ''
     for char in text:
         slug += cyrillic_letters.get(char, char)

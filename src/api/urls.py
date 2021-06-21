@@ -5,7 +5,8 @@ from api.views import (UserViewSet,
                        PollDetailAPIView,
                        QuestionsListAPIView,
                        QuestionDetailAPIView,
-                       ChoiceViewSet, )
+                       ChoiceViewSet,
+                       QuestionViewSet, )
 
 app_name = 'api'
 
@@ -22,14 +23,28 @@ for_one_element = {
 }
 
 urlpatterns = [
+    # --- users
     path('users/', UserViewSet.as_view(for_many_elements), name='users_list'),
     path('users/<int:pk>/', UserViewSet.as_view(for_one_element), name='user_detail'),
+
+    # --- polls
     path('polls/', PollsListAPIView.as_view(), name='polls_list'),
     path('polls/<int:pk>/', PollDetailAPIView.as_view(), name='poll_detail'),
-    path('polls/<int:poll_id>/questions/', QuestionsListAPIView.as_view(), name='questions_list'),
+
+    # --- questions
+    # APIView
+    # path('polls/<int:poll_id>/questions/', QuestionsListAPIView.as_view(), name='questions_list'),
+    # path('polls/<int:poll_id>/questions/<int:pk>/',
+    #      QuestionDetailAPIView.as_view(),
+    #      name='question_detail'),
+
+    # ViewSet
+    path('polls/<int:poll_id>/questions/', QuestionViewSet.as_view(for_many_elements), name='questions_list'),
     path('polls/<int:poll_id>/questions/<int:pk>/',
-         QuestionDetailAPIView.as_view(),
+         QuestionViewSet.as_view(for_one_element),
          name='question_detail'),
+
+    # --- choices
     path('polls/<int:poll_id>/questions/<int:question_id>/choices/',
          ChoiceViewSet.as_view(for_many_elements),
          name='choices_list'),

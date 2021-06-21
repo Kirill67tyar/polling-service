@@ -103,6 +103,55 @@ class Answer(Model):
     def render(self):
         pass
 
+"""
+убрать поле active из Poll - оно там нигде не используется.
+
+сделать дополнительный url api/polls-workspace/..
+и возможно перенести весь функционал для админа и staff туда,
+а в обычном polls сдулать функционал для обычных пользователей.
+
+в функционале для пользователя нужно иметь получить список активных опросов
+критерии активного опроса:
+список из опросов с созданным start_date. start_date должен начинаться раньше сегодняшней даты.
+end_date не обязателен, но если он есть, то сегодняшняя дата должны быть между start_date и end_date
+только такой опрос должен считаться активным
+
+
+теперь модели для обычных юзеров:
+вместо одной Answer сделать две модели - Worksheet, Answer
+
+Answer ссылается на Worksheet по ForeignKey
+нужно сделать так, чтобы Worksheet был привязан к Poll и к User по ForeignKey
+а Answer к Question по ForeignKey
+
+!!! Нужно придумать такой механизм, чтобы если отвечены не все вопросы Опроса,
+то прохождение опроса (Worksheet) считался не завершенным.
+Можно подумать о поле на уровне модели. 
+poll_instance.questions.count() - будет кол-во вопросов в конкретном опросе
+worksheet_instance.answers.count() - будет кол-во ответов данных на опрос.
+
+можно подумать о создании своего поля в Worksheet который при создании экземпляра Worksheet
+будет брать кол-во ответов и сверять их с количеством вопросов в опросе
+кол-во опросов в опросе можно сохранять тогда в отдельное поле в Worksheet
+!!!
+
+class Worksheet(Model):
+    poll = ForeignKey(Poll, on_delete=CASCADE, related_name='worksheets')
+    respondent = ForeignKey(to=User,
+                            on_delete=CASCADE,
+                            related_name='answers',
+                            verbose_name='Респондент')
+    anonymous = BooleanField(default=False, verbose_name='Аноним')
+    quantity_questions = PositiveIntegerField (под вопросом)
+    custom_field
+    
+class Answer(Model):
+    worksheet = ForeignKey(Worksheet, on_delete=CASCADE, related_name='answers')
+    question = ForeignKey(to=Question, on_delete=CASCADE)
+    
+    class Meta:
+        unique_together = ('worksheet', 'question',)
+"""
 
 ## ------------------------------------------------------------------------------------------
 ## Альтернатива с ContentType (GenericForeignKey)

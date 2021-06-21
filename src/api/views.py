@@ -22,7 +22,8 @@ from api.permissions import (MyIsAdminUser, IsOwnerOrAdmin,
 from api.serializers import (UserSerializer, ThinUserSerializers,
                              ThinPollModelSerializer, PollModelSerializer,
                              ThinQuestionModelSerializer, QuestionModelSerializer,
-                             ChoiceModelSerializer, ThinChoiceModelSerializer, )
+                             ChoiceModelSerializer, ThinChoiceModelSerializer,
+                             ExperimentThinChoiceModelSerializer, )
 
 
 def experiments(self):
@@ -39,14 +40,12 @@ def experiments(self):
     return JsonResponse({'status': 'ok', })
 
 
+# ----------------  POLLS
 class PollsListAPIView(ListCreateAPIView):
     model = Poll
     queryset = model.objects.none()
     serializer_class = PollModelSerializer
-    # authentication_classes = (BasicAuthentication,)
     permission_classes = (IsOwnerOrAdmin,)
-
-    # permission_classes = (IsAdminUser,)
 
     def get_queryset(self):
         user = self.request.user
@@ -68,20 +67,22 @@ class PollsListAPIView(ListCreateAPIView):
 class PollDetailAPIView(RetrieveUpdateDestroyAPIView):
     queryset = Poll.objects.all()
     serializer_class = PollModelSerializer
-    authentication_classes = (BasicAuthentication,)
     permission_classes = (IsOwnerOrAdmin,)
 
 
+# ----------------  QUESTIONS
 class QuestionsListAPIView(ListCreateAPIView):
     queryset = Question.objects.all()
     serializer_class = ThinQuestionModelSerializer
-    authentication_classes = (BasicAuthentication,)
     permission_classes = (IsOwnerOrAdmin, StartDateNotCreatedOrReadOnly,)
 
     def get_queryset(self):
+        user = self.request.user
         qs = super().get_queryset()
         poll_id = self.kwargs['poll_id']
         qs = qs.select_related('poll', 'poll__owner').prefetch_related('choices')
+        if user.is_admin:
+            return qs.filter(poll_id=poll_id)
         return qs.filter(poll_id=poll_id, poll__owner=self.request.user)
 
     def perform_create(self, serializer):
@@ -92,25 +93,52 @@ class QuestionsListAPIView(ListCreateAPIView):
 class QuestionDetailAPIView(RetrieveUpdateDestroyAPIView):
     queryset = Question.objects.all()
     serializer_class = QuestionModelSerializer
-    authentication_classes = (BasicAuthentication,)
     permission_classes = (IsOwnerOrAdmin, StartDateNotCreatedOrReadOnly,)
 
     def get_queryset(self):
+        user = self.request.user
         qs = super().get_queryset()
         question_id = self.kwargs['pk']
         qs = qs.select_related('poll', 'poll__owner')
-        return qs.filter(pk=question_id, poll__owner=self.request.user)
+        if user.is_admin:
+            return qs.filter(pk=question_id)
+        return qs.filter(pk=question_id, poll__owner=user)
 
 
-class ChoiceViewSet(ModelViewSet):
-    queryset = Choice.objects.all()
-    serializer_class = ChoiceModelSerializer
-    authentication_classes = (BasicAuthentication,)
+class QuestionViewSet(ModelViewSet):
+    queryset = Question.objects.none()
+    serializer_class = QuestionModelSerializer
     permission_classes = (IsOwnerOrAdmin, StartDateNotCreatedOrReadOnly,)
 
     def get_serializer_class(self):
         if self.action == 'list':
+            return ThinQuestionModelSerializer
+        return QuestionModelSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        poll_id = self.kwargs['poll_id']
+        qs = Question.objects.select_related('poll', 'poll__owner').prefetch_related('choices')
+        if user.is_admin:
+            return qs.filter(poll_id=poll_id)
+        return qs.filter(poll_id=poll_id, poll__owner=self.request.user)
+
+    def perform_create(self, serializer):
+        get_view_at_console1(serializer.validated_data, unpack=0, delimiter='+')
+        serializer.save(poll_id=self.kwargs['poll_id'])
+
+
+# ----------------  CHOICES
+class ChoiceViewSet(ModelViewSet):
+    queryset = Choice.objects.all()
+    serializer_class = ChoiceModelSerializer
+    permission_classes = (IsOwnerOrAdmin, StartDateNotCreatedOrReadOnly,)
+    http_method_names = ('get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace',)
+
+    def get_serializer_class(self):
+        if self.action == 'list':
             return ThinChoiceModelSerializer
+            # return ExperimentThinChoiceModelSerializer
         return ChoiceModelSerializer
 
     def get_queryset(self):
@@ -122,11 +150,13 @@ class ChoiceViewSet(ModelViewSet):
         serializer.save(question_id=self.kwargs['question_id'])
 
 
+# ----------------  USERS
 class UserViewSet(ModelViewSet):
     model = get_user_model()
     queryset = model.objects.all()
     serializer_class = UserSerializer
     permission_classes = (MyIsAdminUser,)
+    http_method_names = ('get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace',)
 
     def get_serializer_class(self):
         if self.action == 'list':
