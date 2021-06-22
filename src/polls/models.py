@@ -112,7 +112,7 @@ class Questionnaire(Model):
 
 
 class Answer(Model):
-    worksheet = ForeignKey(to=Worksheet, on_delete=CASCADE, related_name='answers')
+    questionnaire = ForeignKey(to=Questionnaire, on_delete=CASCADE, related_name='answers')
     question = ForeignKey(to=Question, on_delete=CASCADE, related_name='answers')
     text = TextField(blank=True, null=True)
     radio = ForeignKey(to=Choice, on_delete=CASCADE, blank=True, null=True)

@@ -260,7 +260,7 @@ class ThinUserSerializers(ModelSerializer):
 class QuestionnaireModelSerializer(ModelSerializer):
     class Meta:
         model = Worksheet
-        fields = ('poll', 'respondent', 'anonymous', 'anonymous',)
+        fields = ('poll', 'respondent', 'anonymous',)
         extra_kwargs = {'respondent': {'read_only': True, }, }
 
     def create(self, validated_data):
