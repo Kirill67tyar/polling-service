@@ -5,7 +5,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.db.models import (Model, CharField, SlugField, TextField,
                               DateTimeField, BooleanField, PositiveIntegerField,
-                              ForeignKey, ManyToManyField, CASCADE, )
+                              ForeignKey, ManyToManyField, URLField, CASCADE, )
 
 from polls.utils import my_custom_slugify
 
@@ -22,7 +22,6 @@ class Poll(Model):
     start_date = DateTimeField(verbose_name='Начало опроса', blank=True, null=True)
     end_date = DateTimeField(verbose_name='Конец опроса', blank=True, null=True)
     created = DateTimeField(auto_now_add=True, verbose_name='Опрос создан')
-    active = BooleanField(default=False, verbose_name='Опрос менять нельзя')
 
     class Meta:
         # https://docs.djangoproject.com/en/3.2/ref/models/options/
@@ -34,15 +33,17 @@ class Poll(Model):
         return self.title
 
     def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(my_custom_slugify(str(self.title)))
+        self.slug = slugify(my_custom_slugify(str(self.title)))
         return super(Poll, self).save(*args, **kwargs)
+
 
 """
 возможно здесь придется переписать type_question чтобы был обычный CharField. 
 А дальше на уровне сохранения serializer(create) если не checkbox/radio/text
 то сохранять type_question как text
 """
+
+
 class Question(Model):
     CHOICES = (
         ('text', 'Text',),  # 1
@@ -80,28 +81,69 @@ class Choice(Model):
         return self.title
 
 
-# Разные стратегии, как альтернатива для GenericForeignKey:
-# https://djbook.ru/examples/88/
-class Answer(Model):
-    question = ForeignKey(to=Question,
-                          on_delete=CASCADE,
-                          related_name='answers',
-                          verbose_name='Вопрос')
+# Questionnaire вместо Worksheet, переименовать
+class Questionnaire(Model):
+    poll = ForeignKey(Poll, on_delete=CASCADE, related_name='worksheets')
     respondent = ForeignKey(to=User,
                             on_delete=CASCADE,
                             related_name='answers',
                             verbose_name='Респондент')
     anonymous = BooleanField(default=False, verbose_name='Аноним')
+    completed = BooleanField(default=False)
+    quantity_questions = PositiveIntegerField(blank=True, null=True)
+    questions_list = URLField(unique=True, blank=True, null=True)
+
+    class Meta:
+        verbose_name = 'Прохождение опроса'
+        unique_together = ('poll', 'respondent',)
+
+    def __str__(self):
+        return f'Respondent: {self.respondent}. Poll: {self.poll.pk}){self.poll}. Completed: {self.completed}'
+
+    def save(self, *args, **kwargs):
+        if not self.quantity_questions:
+            self.quantity_questions = self.poll.questions.count()
+        quantity_answers = self.answers.count()
+        if self.quantity_questions == quantity_answers:
+            self.completed = True
+        else:
+            self.completed = False
+        return super().save(*args, **kwargs)
+
+
+class Answer(Model):
+    worksheet = ForeignKey(to=Worksheet, on_delete=CASCADE, related_name='answers')
+    question = ForeignKey(to=Question, on_delete=CASCADE, related_name='answers')
     text = TextField(blank=True, null=True)
     radio = ForeignKey(to=Choice, on_delete=CASCADE, blank=True, null=True)
     checkbox = ManyToManyField(to=Choice, related_name='checkbox_answers', blank=True)
 
     class Meta:
-        verbose_name = 'Ответ'
-        verbose_name_plural = 'Ответы'
+        unique_together = ('worksheet', 'question',)
 
-    def render(self):
-        pass
+
+# Разные стратегии, как альтернатива для GenericForeignKey:
+# https://djbook.ru/examples/88/
+# class Answer(Model):
+#     question = ForeignKey(to=Question,
+#                           on_delete=CASCADE,
+#                           related_name='answers',
+#                           verbose_name='Вопрос')
+#     respondent = ForeignKey(to=User,
+#                             on_delete=CASCADE,
+#                             related_name='answers',
+#                             verbose_name='Респондент')
+#     anonymous = BooleanField(default=False, verbose_name='Аноним')
+#     text = TextField(blank=True, null=True)
+#     radio = ForeignKey(to=Choice, on_delete=CASCADE, blank=True, null=True)
+#     checkbox = ManyToManyField(to=Choice, related_name='checkbox_answers', blank=True)
+#
+#     class Meta:
+#         verbose_name = 'Ответ'
+#         verbose_name_plural = 'Ответы'
+#
+#     def render(self):
+#         pass
 
 """
 убрать поле active из Poll - оно там нигде не используется.
@@ -151,6 +193,16 @@ class Answer(Model):
     
     class Meta:
         unique_together = ('worksheet', 'question',)
+        
+        
+        
+course = ForeignKey('Course', on_delete=CASCADE, related_name='modules')
+order = OrderField(blank=True, for_fields=['course', ])
+
+
+!!!
+Может стоит при выводе данных в JSON сделать ключ meta-data и в 
+этом ключе, допустим для choice detail, выводить poll_id, question_id, user_id
 """
 
 ## ------------------------------------------------------------------------------------------
@@ -208,7 +260,6 @@ Poll
     end_date
     description
     created?
-    active?
     
 Question
     poll (ForeignKey Poll)

@@ -13,7 +13,7 @@ from rest_framework.relations import HyperlinkedIdentityField
 from rest_framework.serializers import ModelSerializer, Serializer, CharField
 
 from polls.utils import get_view_at_console1, get_object_or_null, my_custom_slugify
-from polls.models import (Poll, Question, Choice, Answer)
+from polls.models import (Poll, Question, Choice, Worksheet, Answer, )
 
 
 # https://www.django-rest-framework.org/api-guide/fields/
@@ -22,6 +22,7 @@ from polls.models import (Poll, Question, Choice, Answer)
 # !!! когда будешь пилить сериализаторы для user прочти статью:
 # https://www.django-rest-framework.org/api-guide/fields/#choice-selection-fields
 
+# vvv=================vvv==================vvv  WORKSPACE  vvv================vvv=================vvv
 def check_poll_data(validated_data):
     start_date = validated_data['start_date']
     end_date = validated_data['end_date']
@@ -33,6 +34,7 @@ def check_poll_data(validated_data):
             if end_date <= start_date:
                 raise ValidationError('Время окончания опроса не должно начинаться раньше времени начала опроса')
     return True
+
 
 # ----------------  CHOICES
 class ExperimentThinChoiceModelSerializer(ModelSerializer):
@@ -58,7 +60,6 @@ class ExperimentThinChoiceModelSerializer(ModelSerializer):
         fields = ('pk', 'title', 'choice_detail',)
 
 
-
 class ThinChoiceModelSerializer(ModelSerializer):
     # choice_detail = HyperlinkedIdentityField(view_name='api:choice_detail')
     choice_detail = SerializerMethodField(read_only=True)
@@ -66,8 +67,8 @@ class ThinChoiceModelSerializer(ModelSerializer):
     def get_choice_detail(self, obj):
         request = self.context['request']
         relative_url = request.get_full_path_info().split('/')
-        poll_id = relative_url[3]
-        question_id = relative_url[5]
+        poll_id = relative_url[4]  # change poll_id
+        question_id = relative_url[6]  # change question_id
         return request.build_absolute_uri(reverse_lazy('api:choice_detail',
                                                        kwargs={'poll_id': poll_id,
                                                                'question_id': question_id,
@@ -75,7 +76,7 @@ class ThinChoiceModelSerializer(ModelSerializer):
 
     class Meta:
         model = Choice
-        fields = ('pk', 'title', 'choice_detail',)
+        fields = ('id', 'title', 'choice_detail',)
 
 
 class ChoiceModelSerializer(ModelSerializer):
@@ -87,7 +88,7 @@ class ChoiceModelSerializer(ModelSerializer):
 
     def get_poll_id(self, obj):
         request = self.context['request']
-        return request.get_full_path_info().split('/')[5]
+        return int(request.get_full_path_info().split('/')[4])  # change poll_id
 
     class Meta:
         model = Choice
@@ -101,7 +102,7 @@ class ThinQuestionModelSerializer(ModelSerializer):
     def get_question_detail(self, obj):
         request = self.context['request']
         relative_url = request.get_full_path_info().split('/')
-        poll_id = relative_url[3]
+        poll_id = relative_url[4]  # change poll_id
         if isinstance(obj, Question):
             return request.build_absolute_uri(reverse_lazy('api:question_detail',
                                                            kwargs={'poll_id': poll_id,  # obj.poll.pk,
@@ -120,7 +121,7 @@ class QuestionModelSerializer(ModelSerializer):
 
     def take_poll_id(self):
         request = self.context['request']
-        return request.get_full_path_info().split('/')[5]
+        return request.get_full_path_info().split('/')[4]  # change poll_id
 
     def get_poll_id(self, obj):
         return obj.poll.pk
@@ -135,7 +136,7 @@ class QuestionModelSerializer(ModelSerializer):
         if type_question in ('radio', 'checkbox',):
             pk = ret.get('id')
             relative_url = request.get_full_path_info().split('/')
-            poll_id = relative_url[3]
+            poll_id = relative_url[4]  # change poll_id
             ret['choices_list'] = request.build_absolute_uri(reverse_lazy('api:choices_list',
                                                                           kwargs={'poll_id': poll_id,
                                                                                   'question_id': pk, }))
@@ -185,7 +186,6 @@ class PollModelSerializer(ModelSerializer):
                   'start_date',
                   'end_date',
                   'created',
-                  # 'active',
                   'questions_list',
                   'questions',
                   )
@@ -197,8 +197,8 @@ class PollModelSerializer(ModelSerializer):
 
     def update(self, instance, validated_data):
         get_view_at_console1(validated_data)
-        slug = slugify(my_custom_slugify(str(validated_data['title'])))
-        instance.slug = slug
+        # slug = slugify(my_custom_slugify(str(validated_data['title'])))
+        # instance.slug = slug
         check_poll_data(validated_data)
         return super().update(instance, validated_data)
 
@@ -255,8 +255,99 @@ class ThinUserSerializers(ModelSerializer):
         fields = ('id', 'email', 'is_active', 'user_detail',)
 
 
+# ^^^=================^^^==================^^^  WORKSPACE  ^^^================^^^=================^^^
 
-# class
+class QuestionnaireModelSerializer(ModelSerializer):
+    class Meta:
+        model = Worksheet
+        fields = ('poll', 'respondent', 'anonymous', 'anonymous',)
+        extra_kwargs = {'respondent': {'read_only': True, }, }
+
+    def create(self, validated_data):
+        # может достаточно только этого:
+        validated_data['respondent'] = self.context['request'].user
+        return super().create(validated_data)
+        # # но если нет, то:
+        # instance = self.Meta.model(**validated_data)
+        # instance.save()
+        # return instance
+
+
+"""
+class Worksheet(Model):
+    poll = ForeignKey(Poll, on_delete=CASCADE, related_name='worksheets')
+    respondent = ForeignKey(to=User,
+                            on_delete=CASCADE,
+                            related_name='answers',
+                            verbose_name='Респондент')
+    anonymous = BooleanField(default=False, verbose_name='Аноним')
+    completed = BooleanField(default=False)
+    quantity_questions = PositiveIntegerField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = 'Прохождение опроса'
+        # unique_together = ('poll', 'respondent',)
+
+    def __str__(self):
+        return f'Respondent: {self.respondent}. Poll: {self.poll.pk}){self.poll}. Completed: {self.completed}'
+
+    def save(self, *args, **kwargs):
+        if not self.quantity_questions:
+            self.quantity_questions = self.poll.questions.count()
+        quantity_answers = self.answers.count()
+        if self.quantity_questions == quantity_answers:
+            self.completed = True
+        else:
+            self.completed = False
+        return super().save(*args, **kwargs)
+
+
+class Answer(Model):
+    worksheet = ForeignKey(to=Worksheet, on_delete=CASCADE, related_name='answers')
+    question = ForeignKey(to=Question, on_delete=CASCADE, related_name='answers')
+    text = TextField(blank=True, null=True)
+    radio = ForeignKey(to=Choice, on_delete=CASCADE, blank=True, null=True)
+    checkbox = ManyToManyField(to=Choice, related_name='checkbox_answers', blank=True)
+
+    class Meta:
+        unique_together = ('worksheet', 'question',)class Worksheet(Model):
+    poll = ForeignKey(Poll, on_delete=CASCADE, related_name='worksheets')
+    respondent = ForeignKey(to=User,
+                            on_delete=CASCADE,
+                            related_name='answers',
+                            verbose_name='Респондент')
+    anonymous = BooleanField(default=False, verbose_name='Аноним')
+    completed = BooleanField(default=False)
+    quantity_questions = PositiveIntegerField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = 'Прохождение опроса'
+        # unique_together = ('poll', 'respondent',)
+
+    def __str__(self):
+        return f'Respondent: {self.respondent}. Poll: {self.poll.pk}){self.poll}. Completed: {self.completed}'
+
+    def save(self, *args, **kwargs):
+        if not self.quantity_questions:
+            self.quantity_questions = self.poll.questions.count()
+        quantity_answers = self.answers.count()
+        if self.quantity_questions == quantity_answers:
+            self.completed = True
+        else:
+            self.completed = False
+        return super().save(*args, **kwargs)
+
+
+class Answer(Model):
+    worksheet = ForeignKey(to=Worksheet, on_delete=CASCADE, related_name='answers')
+    question = ForeignKey(to=Question, on_delete=CASCADE, related_name='answers')
+    text = TextField(blank=True, null=True)
+    radio = ForeignKey(to=Choice, on_delete=CASCADE, blank=True, null=True)
+    checkbox = ManyToManyField(to=Choice, related_name='checkbox_answers', blank=True)
+
+    class Meta:
+        unique_together = ('worksheet', 'question',)
+"""
 
 """
 class Poll(Model):
@@ -269,7 +360,6 @@ class Poll(Model):
     start_date = DateTimeField(verbose_name='Начало опроса', blank=True, null=True)
     end_date = DateTimeField(verbose_name='Конец опроса', blank=True, null=True)
     created = DateTimeField(auto_now_add=True, verbose_name='Опрос создан')
-    active = BooleanField(default=False, verbose_name='Опрос менять нельзя')
 
     class Meta:
         # https://docs.djangoproject.com/en/3.2/ref/models/options/

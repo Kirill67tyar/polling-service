@@ -30,7 +30,7 @@ class StartDateNotCreatedOrReadOnly(BasePermission):
 
     def has_permission(self, request, view):
         url = request.get_full_path_info().split('/')
-        poll_id = url[3]
+        poll_id = url[4]
         poll = get_object_or_null(Poll, pk=poll_id)
         if poll:
             return bool(
