@@ -6,16 +6,18 @@ from rest_framework.status import HTTP_200_OK
 from django.contrib.auth import get_user_model
 from rest_framework.reverse import reverse_lazy
 from rest_framework.viewsets import ModelViewSet
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAdminUser, IsAuthenticatedOrReadOnly
 from rest_framework.authentication import BasicAuthentication
-from rest_framework.generics import (ListCreateAPIView,
+from rest_framework.generics import (ListAPIView,
+                                     ListCreateAPIView,
                                      RetrieveUpdateDestroyAPIView,
                                      get_object_or_404, GenericAPIView)
 from django.urls import reverse
+from django.utils import timezone
 from django.http import JsonResponse
 from django.views.generic import ListView, CreateView
 
-from polls.models import (Poll, Question, Choice, Answer, )
+from polls.models import Poll, Question, Choice, Questionnaire, Answer
 from polls.utils import get_view_at_console1, get_object_or_null
 from api.permissions import (MyIsAdminUser, IsOwnerOrAdmin,
                              StartDateNotCreatedOrReadOnly, )
@@ -23,8 +25,11 @@ from api.serializers import (UserSerializer, ThinUserSerializers,
                              ThinPollModelSerializer, PollModelSerializer,
                              ThinQuestionModelSerializer, QuestionModelSerializer,
                              ChoiceModelSerializer, ThinChoiceModelSerializer,
-                             ExperimentThinChoiceModelSerializer, )
+                             ExperimentThinChoiceModelSerializer,
+                             SelectPollModelSerilaizer,
+                             QuestionnaireModelSerializer, )
 
+now = timezone.now()
 
 def experiments(self):
     ## self здесь был экземпляр PollsListAPIView
@@ -162,3 +167,36 @@ class UserViewSet(ModelViewSet):
         if self.action == 'list':
             return ThinUserSerializers
         return UserSerializer
+
+
+class SelectPollListAPIView(ListAPIView):
+    model = Questionnaire
+    queryset = model.objects.none()
+    serializer_class = SelectPollModelSerilaizer
+    permission_classes = (IsAuthenticatedOrReadOnly,)
+
+    def get_queryset(self):
+        user = self.request.user
+        get_view_at_console1(now)
+        qs = Poll.objects.filter(start_date__lte=now, end_date__gte=now)
+        if user.is_authenticated:
+            questionnaires = list(Questionnaire.objects.filter(respondent=user))
+            return qs.exclude(questionnaires__in=questionnaires)
+        return qs
+
+
+# Далее сделатть обработчик-функцию, которая будет показывать выбранный
+# poll и даст возможность записаться на него post запросом
+# этот ниже убрать
+class SelectPollViewSet(ListCreateAPIView):
+    model = Questionnaire
+    queryset = Questionnaire.objects.all()
+    serializer_class = QuestionnaireModelSerializer
+
+    def list(self, request, *args, **kwargs):
+        now = timezone.now()
+        user = request.user
+        questionnaires = list(Questionnaire.objects.filter(respondent=user))
+        polls = Poll.objects.exclude(questionnaires__in=questionnaires).filter(start_date__lte=now, end_date__gte=now)
+        serializer = SelectPollModelSerilaizer(polls, many=True)
+        return Response(serializer.data, status=HTTP_200_OK)

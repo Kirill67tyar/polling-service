@@ -13,7 +13,7 @@ from rest_framework.relations import HyperlinkedIdentityField
 from rest_framework.serializers import ModelSerializer, Serializer, CharField
 
 from polls.utils import get_view_at_console1, get_object_or_null, my_custom_slugify
-from polls.models import (Poll, Question, Choice, Worksheet, Answer, )
+from polls.models import Poll, Question, Choice, Questionnaire, Answer
 
 
 # https://www.django-rest-framework.org/api-guide/fields/
@@ -257,11 +257,42 @@ class ThinUserSerializers(ModelSerializer):
 
 # ^^^=================^^^==================^^^  WORKSPACE  ^^^================^^^=================^^^
 
+
+class SelectPollModelSerilaizer(ModelSerializer):
+    quantity_questions = SerializerMethodField(read_only=True)
+    started = SerializerMethodField(read_only=True)
+
+    def get_quantity_questions(self, obj):
+        return obj.questions.count()
+
+    def get_started(self, obj):
+        user = self.context['request'].user
+        if user.is_authenticated:
+            return user.questionnaires.filter(completed=False, questionnaires=obj).exist()
+        return None
+
+    class Meta:
+        model = Poll
+        fields = ('id',
+                  'owner',
+                  'title',
+                  'slug',
+                  'description',
+                  'start_date',
+                  'end_date',
+                  'quantity_questions',
+                  'started',)
+
+
 class QuestionnaireModelSerializer(ModelSerializer):
     class Meta:
-        model = Worksheet
-        fields = ('poll', 'respondent', 'anonymous',)
-        extra_kwargs = {'respondent': {'read_only': True, }, }
+        model = Questionnaire
+        fields = ('poll', 'respondent', 'anonymous', 'completed',)
+        extra_kwargs = {
+            'respondent': {'read_only': True, },
+            'completed': {'read_only': True, },
+            'quantity_questions': {'read_only': True, },
+        }
 
     def create(self, validated_data):
         # может достаточно только этого:
@@ -274,8 +305,8 @@ class QuestionnaireModelSerializer(ModelSerializer):
 
 
 """
-class Worksheet(Model):
-    poll = ForeignKey(Poll, on_delete=CASCADE, related_name='worksheets')
+class Questionnaire(Model):
+    poll = ForeignKey(Poll, on_delete=SET_NULL, null=True, related_name='questionnaires')
     respondent = ForeignKey(to=User,
                             on_delete=CASCADE,
                             related_name='answers',
@@ -283,10 +314,11 @@ class Worksheet(Model):
     anonymous = BooleanField(default=False, verbose_name='Аноним')
     completed = BooleanField(default=False)
     quantity_questions = PositiveIntegerField(blank=True, null=True)
+    questions_list = URLField(unique=True, blank=True, null=True)
 
     class Meta:
         verbose_name = 'Прохождение опроса'
-        # unique_together = ('poll', 'respondent',)
+        unique_together = ('poll', 'respondent',)
 
     def __str__(self):
         return f'Respondent: {self.respondent}. Poll: {self.poll.pk}){self.poll}. Completed: {self.completed}'
@@ -294,59 +326,20 @@ class Worksheet(Model):
     def save(self, *args, **kwargs):
         if not self.quantity_questions:
             self.quantity_questions = self.poll.questions.count()
-        quantity_answers = self.answers.count()
-        if self.quantity_questions == quantity_answers:
-            self.completed = True
-        else:
-            self.completed = False
         return super().save(*args, **kwargs)
 
 
 class Answer(Model):
-    worksheet = ForeignKey(to=Worksheet, on_delete=CASCADE, related_name='answers')
+    questionnaire = ForeignKey(to=Questionnaire, on_delete=CASCADE, related_name='answers')
     question = ForeignKey(to=Question, on_delete=CASCADE, related_name='answers')
+    count_answers = CountAnswersField(blank=True, null=True, for_fields=['questionnaire', ])
     text = TextField(blank=True, null=True)
     radio = ForeignKey(to=Choice, on_delete=CASCADE, blank=True, null=True)
     checkbox = ManyToManyField(to=Choice, related_name='checkbox_answers', blank=True)
 
     class Meta:
-        unique_together = ('worksheet', 'question',)class Worksheet(Model):
-    poll = ForeignKey(Poll, on_delete=CASCADE, related_name='worksheets')
-    respondent = ForeignKey(to=User,
-                            on_delete=CASCADE,
-                            related_name='answers',
-                            verbose_name='Респондент')
-    anonymous = BooleanField(default=False, verbose_name='Аноним')
-    completed = BooleanField(default=False)
-    quantity_questions = PositiveIntegerField(blank=True, null=True)
+        unique_together = ('questionnaire', 'question',)
 
-    class Meta:
-        verbose_name = 'Прохождение опроса'
-        # unique_together = ('poll', 'respondent',)
-
-    def __str__(self):
-        return f'Respondent: {self.respondent}. Poll: {self.poll.pk}){self.poll}. Completed: {self.completed}'
-
-    def save(self, *args, **kwargs):
-        if not self.quantity_questions:
-            self.quantity_questions = self.poll.questions.count()
-        quantity_answers = self.answers.count()
-        if self.quantity_questions == quantity_answers:
-            self.completed = True
-        else:
-            self.completed = False
-        return super().save(*args, **kwargs)
-
-
-class Answer(Model):
-    worksheet = ForeignKey(to=Worksheet, on_delete=CASCADE, related_name='answers')
-    question = ForeignKey(to=Question, on_delete=CASCADE, related_name='answers')
-    text = TextField(blank=True, null=True)
-    radio = ForeignKey(to=Choice, on_delete=CASCADE, blank=True, null=True)
-    checkbox = ManyToManyField(to=Choice, related_name='checkbox_answers', blank=True)
-
-    class Meta:
-        unique_together = ('worksheet', 'question',)
 """
 
 """

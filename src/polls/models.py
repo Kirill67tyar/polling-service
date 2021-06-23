@@ -1,16 +1,16 @@
-# from django.db import models
+from django.db import models
 from django.conf import settings
 from django.utils.text import slugify
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.db.models import (Model, CharField, SlugField, TextField,
                               DateTimeField, BooleanField, PositiveIntegerField,
-                              ForeignKey, ManyToManyField, URLField, CASCADE, )
+                              ForeignKey, ManyToManyField, URLField, CASCADE, SET_NULL,)
 
 from polls.utils import my_custom_slugify
+from polls.fields import CountAnswersField
 
 User = settings.AUTH_USER_MODEL
-
 
 class Poll(Model):
     owner = ForeignKey(to=User, on_delete=CASCADE,
@@ -81,12 +81,11 @@ class Choice(Model):
         return self.title
 
 
-# Questionnaire вместо Worksheet, переименовать
 class Questionnaire(Model):
-    poll = ForeignKey(Poll, on_delete=CASCADE, related_name='worksheets')
+    poll = ForeignKey(Poll, on_delete=SET_NULL, null=True, related_name='questionnaires')
     respondent = ForeignKey(to=User,
                             on_delete=CASCADE,
-                            related_name='answers',
+                            related_name='questionnaires',
                             verbose_name='Респондент')
     anonymous = BooleanField(default=False, verbose_name='Аноним')
     completed = BooleanField(default=False)
@@ -103,47 +102,21 @@ class Questionnaire(Model):
     def save(self, *args, **kwargs):
         if not self.quantity_questions:
             self.quantity_questions = self.poll.questions.count()
-        quantity_answers = self.answers.count()
-        if self.quantity_questions == quantity_answers:
-            self.completed = True
-        else:
-            self.completed = False
         return super().save(*args, **kwargs)
 
 
 class Answer(Model):
     questionnaire = ForeignKey(to=Questionnaire, on_delete=CASCADE, related_name='answers')
     question = ForeignKey(to=Question, on_delete=CASCADE, related_name='answers')
+    count_answers = CountAnswersField(blank=True, null=True, for_fields=['questionnaire', ])
     text = TextField(blank=True, null=True)
     radio = ForeignKey(to=Choice, on_delete=CASCADE, blank=True, null=True)
     checkbox = ManyToManyField(to=Choice, related_name='checkbox_answers', blank=True)
 
     class Meta:
-        unique_together = ('worksheet', 'question',)
+        unique_together = ('questionnaire', 'question',)
 
 
-# Разные стратегии, как альтернатива для GenericForeignKey:
-# https://djbook.ru/examples/88/
-# class Answer(Model):
-#     question = ForeignKey(to=Question,
-#                           on_delete=CASCADE,
-#                           related_name='answers',
-#                           verbose_name='Вопрос')
-#     respondent = ForeignKey(to=User,
-#                             on_delete=CASCADE,
-#                             related_name='answers',
-#                             verbose_name='Респондент')
-#     anonymous = BooleanField(default=False, verbose_name='Аноним')
-#     text = TextField(blank=True, null=True)
-#     radio = ForeignKey(to=Choice, on_delete=CASCADE, blank=True, null=True)
-#     checkbox = ManyToManyField(to=Choice, related_name='checkbox_answers', blank=True)
-#
-#     class Meta:
-#         verbose_name = 'Ответ'
-#         verbose_name_plural = 'Ответы'
-#
-#     def render(self):
-#         pass
 
 """
 убрать поле active из Poll - оно там нигде не используется.
@@ -160,25 +133,25 @@ end_date не обязателен, но если он есть, то сегод
 
 
 теперь модели для обычных юзеров:
-вместо одной Answer сделать две модели - Worksheet, Answer
+вместо одной Answer сделать две модели - Questionnaire, Answer
 
-Answer ссылается на Worksheet по ForeignKey
-нужно сделать так, чтобы Worksheet был привязан к Poll и к User по ForeignKey
+Answer ссылается на Questionnaire по ForeignKey
+нужно сделать так, чтобы Questionnaire был привязан к Poll и к User по ForeignKey
 а Answer к Question по ForeignKey
 
 !!! Нужно придумать такой механизм, чтобы если отвечены не все вопросы Опроса,
-то прохождение опроса (Worksheet) считался не завершенным.
+то прохождение опроса (Questionnaire) считался не завершенным.
 Можно подумать о поле на уровне модели. 
 poll_instance.questions.count() - будет кол-во вопросов в конкретном опросе
-worksheet_instance.answers.count() - будет кол-во ответов данных на опрос.
+Questionnaire_instance.answers.count() - будет кол-во ответов данных на опрос.
 
-можно подумать о создании своего поля в Worksheet который при создании экземпляра Worksheet
+можно подумать о создании своего поля в Questionnaire который при создании экземпляра Questionnaire
 будет брать кол-во ответов и сверять их с количеством вопросов в опросе
-кол-во опросов в опросе можно сохранять тогда в отдельное поле в Worksheet
+кол-во опросов в опросе можно сохранять тогда в отдельное поле в Questionnaire
 !!!
 
-class Worksheet(Model):
-    poll = ForeignKey(Poll, on_delete=CASCADE, related_name='worksheets')
+class Questionnaire(Model):
+    poll = ForeignKey(Poll, on_delete=CASCADE, related_name='Questionnaires')
     respondent = ForeignKey(to=User,
                             on_delete=CASCADE,
                             related_name='answers',
@@ -188,11 +161,11 @@ class Worksheet(Model):
     custom_field
     
 class Answer(Model):
-    worksheet = ForeignKey(Worksheet, on_delete=CASCADE, related_name='answers')
+    Questionnaire = ForeignKey(Questionnaire, on_delete=CASCADE, related_name='answers')
     question = ForeignKey(to=Question, on_delete=CASCADE)
     
     class Meta:
-        unique_together = ('worksheet', 'question',)
+        unique_together = ('Questionnaire', 'question',)
         
         
         

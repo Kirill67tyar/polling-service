@@ -6,7 +6,8 @@ from api.views import (UserViewSet,
                        QuestionsListAPIView,
                        QuestionDetailAPIView,
                        ChoiceViewSet,
-                       QuestionViewSet, )
+                       QuestionViewSet,
+                       SelectPollListAPIView, )
 
 app_name = 'api'
 
@@ -51,4 +52,6 @@ urlpatterns = [
     path('workspace/polls/<int:poll_id>/questions/<int:question_id>/choices/<int:pk>/',
          ChoiceViewSet.as_view(for_one_element),
          name='choice_detail'),
+
+    path('polls/', SelectPollListAPIView.as_view(), name='select_poll_list')
 ]
