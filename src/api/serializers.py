@@ -257,6 +257,17 @@ class ThinUserSerializers(ModelSerializer):
 
 # ^^^=================^^^==================^^^  WORKSPACE  ^^^================^^^=================^^^
 
+class ThinSelectPollModelSerilaizer(ModelSerializer):
+    quantity_questions = SerializerMethodField(read_only=True)
+    select_poll = HyperlinkedIdentityField('api:select_poll')
+
+    def get_quantity_questions(self, obj):
+        return obj.questions.count()
+
+    class Meta:
+        model = Poll
+        fields = ('id', 'owner', 'title', 'quantity_questions', 'select_poll',)
+
 
 class SelectPollModelSerilaizer(ModelSerializer):
     quantity_questions = SerializerMethodField(read_only=True)
@@ -268,7 +279,7 @@ class SelectPollModelSerilaizer(ModelSerializer):
     def get_started(self, obj):
         user = self.context['request'].user
         if user.is_authenticated:
-            return user.questionnaires.filter(completed=False, questionnaires=obj).exist()
+            return user.questionnaires.filter(completed=False, poll=obj).exists()
         return None
 
     class Meta:
@@ -285,147 +296,38 @@ class SelectPollModelSerilaizer(ModelSerializer):
 
 
 class QuestionnaireModelSerializer(ModelSerializer):
+    number_of_remaining_questions = SerializerMethodField(read_only=True)
+    questions_list = SerializerMethodField(read_only=True)
+
+    def get_number_of_remaining_questions(self, obj):
+        if not obj.completed:
+            return obj.quantity_questions - obj.answers.count()
+        return 'Ответы даны на все вопросы'
+
+    def get_questions_list(self, obj):
+        request = self.context['request']
+        user = request.user
+        if user.is_authenticated:
+            kwargs = {'questionnaire_id': obj.pk, }
+            relative_url = reverse_lazy('api:questionnaire_questions_list', kwargs=kwargs)
+            return request.build_absolute_uri(relative_url)
+        return None
+
     class Meta:
         model = Questionnaire
-        fields = ('poll', 'respondent', 'anonymous', 'completed',)
+        fields = ('poll',
+                  'respondent',
+                  'anonymous',
+                  'completed',
+                  'number_of_remaining_questions',
+                  'questions_list',)
         extra_kwargs = {
+            'poll': {'read_only': True, },
             'respondent': {'read_only': True, },
             'completed': {'read_only': True, },
             'quantity_questions': {'read_only': True, },
         }
 
-    def create(self, validated_data):
-        # может достаточно только этого:
-        validated_data['respondent'] = self.context['request'].user
-        return super().create(validated_data)
-        # # но если нет, то:
-        # instance = self.Meta.model(**validated_data)
-        # instance.save()
-        # return instance
-
-
-"""
-class Questionnaire(Model):
-    poll = ForeignKey(Poll, on_delete=SET_NULL, null=True, related_name='questionnaires')
-    respondent = ForeignKey(to=User,
-                            on_delete=CASCADE,
-                            related_name='answers',
-                            verbose_name='Респондент')
-    anonymous = BooleanField(default=False, verbose_name='Аноним')
-    completed = BooleanField(default=False)
-    quantity_questions = PositiveIntegerField(blank=True, null=True)
-    questions_list = URLField(unique=True, blank=True, null=True)
-
+class QuestionnaireQuestionsModelSerializer(ModelSerializer):
     class Meta:
-        verbose_name = 'Прохождение опроса'
-        unique_together = ('poll', 'respondent',)
-
-    def __str__(self):
-        return f'Respondent: {self.respondent}. Poll: {self.poll.pk}){self.poll}. Completed: {self.completed}'
-
-    def save(self, *args, **kwargs):
-        if not self.quantity_questions:
-            self.quantity_questions = self.poll.questions.count()
-        return super().save(*args, **kwargs)
-
-
-class Answer(Model):
-    questionnaire = ForeignKey(to=Questionnaire, on_delete=CASCADE, related_name='answers')
-    question = ForeignKey(to=Question, on_delete=CASCADE, related_name='answers')
-    count_answers = CountAnswersField(blank=True, null=True, for_fields=['questionnaire', ])
-    text = TextField(blank=True, null=True)
-    radio = ForeignKey(to=Choice, on_delete=CASCADE, blank=True, null=True)
-    checkbox = ManyToManyField(to=Choice, related_name='checkbox_answers', blank=True)
-
-    class Meta:
-        unique_together = ('questionnaire', 'question',)
-
-"""
-
-"""
-class Poll(Model):
-    owner = ForeignKey(to=User, on_delete=CASCADE,
-                       related_name='polls_created',
-                       verbose_name='Автор')
-    title = CharField(max_length=255, db_index=True, verbose_name='Название опроса')
-    slug = SlugField(max_length=250, unique=True, db_index=True, verbose_name='Slug опроса')
-    description = TextField(verbose_name='Описание опроса')
-    start_date = DateTimeField(verbose_name='Начало опроса', blank=True, null=True)
-    end_date = DateTimeField(verbose_name='Конец опроса', blank=True, null=True)
-    created = DateTimeField(auto_now_add=True, verbose_name='Опрос создан')
-
-    class Meta:
-        # https://docs.djangoproject.com/en/3.2/ref/models/options/
-        ordering = ['title', ]
-        verbose_name = 'Опрос'
-        verbose_name_plural = 'Опросы'
-
-    def __str__(self):
-        return self.title
-
-    def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(my_custom_slugify(str(self.title)))
-        return super(Poll, self).save(*args, **kwargs)
-
-
-class Question(Model):
-    CHOICES = (
-        ('text', 'Text',),  # 1
-        ('radio', 'Radio',),  # 2
-        ('checkbox', 'Checkbox',),  # 3
-    )
-    poll = ForeignKey(to=Poll,
-                      on_delete=CASCADE,
-                      related_name='questions',
-                      verbose_name='Опрос')
-    title = CharField(max_length=255, db_index=True, verbose_name='Вопрос')
-    type_question = CharField(max_length=8,
-                              choices=CHOICES,
-                              default='text',
-                              verbose_name='Тип вопроса')
-
-    class Meta:
-        # https://docs.djangoproject.com/en/3.2/ref/models/options/
-        ordering = ['title', ]
-        verbose_name = 'Вопрос'
-        verbose_name_plural = 'Вопросы'
-
-    def __str__(self):
-        return self.title
-
-
-class Choice(Model):
-    question = ForeignKey(to=Question,
-                          on_delete=CASCADE,
-                          related_name='choices',
-                          verbose_name='Вопрос')
-    title = CharField(max_length=255, db_index=True, verbose_name='Вариант ответа')
-
-    def __str__(self):
-        return self.title
-
-
-# Разные стратегии, как альтернатива для GenericForeignKey:
-# https://djbook.ru/examples/88/
-class Answer(Model):
-    question = ForeignKey(to=Question,
-                          on_delete=CASCADE,
-                          related_name='answers',
-                          verbose_name='Вопрос')
-    respondent = ForeignKey(to=User,
-                            on_delete=CASCADE,
-                            related_name='answers',
-                            verbose_name='Респондент')
-    anonymous = BooleanField(default=False, verbose_name='Аноним')
-    text = TextField(blank=True, null=True)
-    radio = ForeignKey(to=Choice, on_delete=CASCADE, blank=True, null=True)
-    checkbox = ManyToManyField(to=Choice, related_name='checkbox_answers', blank=True)
-
-    class Meta:
-        verbose_name = 'Ответ'
-        verbose_name_plural = 'Ответы'
-
-    def render(self):
         pass
-"""

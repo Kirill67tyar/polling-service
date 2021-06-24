@@ -2,19 +2,20 @@ from collections import OrderedDict
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.status import HTTP_200_OK
-from django.contrib.auth import get_user_model
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.reverse import reverse_lazy
 from rest_framework.viewsets import ModelViewSet
-from rest_framework.permissions import IsAdminUser, IsAuthenticatedOrReadOnly
+from rest_framework.status import HTTP_200_OK, HTTP_404_NOT_FOUND
+from rest_framework.permissions import IsAdminUser, IsAuthenticatedOrReadOnly, IsAuthenticated
 from rest_framework.authentication import BasicAuthentication
 from rest_framework.generics import (ListAPIView,
                                      ListCreateAPIView,
                                      RetrieveUpdateDestroyAPIView,
                                      get_object_or_404, GenericAPIView)
-from django.urls import reverse
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.http import JsonResponse
+from django.contrib.auth import get_user_model
 from django.views.generic import ListView, CreateView
 
 from polls.models import Poll, Question, Choice, Questionnaire, Answer
@@ -27,11 +28,13 @@ from api.serializers import (UserSerializer, ThinUserSerializers,
                              ChoiceModelSerializer, ThinChoiceModelSerializer,
                              ExperimentThinChoiceModelSerializer,
                              SelectPollModelSerilaizer,
+                             ThinSelectPollModelSerilaizer,
                              QuestionnaireModelSerializer, )
 
 now = timezone.now()
 
-def experiments(self):
+
+def experiments(request):
     ## self здесь был экземпляр PollsListAPIView
     # get_view_at_console1(self.get_serializer_context(), unpack=0, dictionary=0)
     # get_view_at_console1(self.get_renderer_context(), delimiter='+', unpack=0, dictionary=0)
@@ -39,9 +42,17 @@ def experiments(self):
     # get_view_at_console1(self.get_parser_context(self.request), delimiter=')',  unpack=0, dictionary=0)
     # get_view_at_console1(self.get_exception_handler_context(), delimiter='&',  unpack=0, dictionary=0)
     # get_view_at_console1(self.get_content_negotiator(), delimiter='^',  unpack=0, dictionary=0)
-    get_view_at_console1(self, delimiter='^', unpack=0, dictionary=0)
-    get_view_at_console1(self, delimiter=':', unpack=0, dictionary=0, find_type=1)
-    get_view_at_console1(self, delimiter='!', unpack=0, dictionary=0, find_mro=1)
+    # get_view_at_console1(self, delimiter='^', unpack=0, dictionary=0)
+    # get_view_at_console1(self, delimiter=':', unpack=0, dictionary=0, find_type=1)
+    # get_view_at_console1(self, delimiter='!', unpack=0, dictionary=0, find_mro=1)
+    get_view_at_console1(request.get_full_path(), delimiter=' - ', unpack=0, dictionary=0, find_mro=0)
+    get_view_at_console1(request.get_full_path_info(), delimiter=' - ', unpack=0, dictionary=0, find_mro=0)
+    get_view_at_console1(request.get_host(), delimiter=' - ', unpack=0, dictionary=0, find_mro=0)
+    get_view_at_console1(request.get_port(), delimiter=' - ', unpack=0, dictionary=0, find_mro=0)
+    get_view_at_console1(request.get_raw_uri(), delimiter=' - ', unpack=0, dictionary=0, find_mro=0)
+    get_view_at_console1(request.path, delimiter=' p ', unpack=0, dictionary=0, find_mro=0)
+    get_view_at_console1(request.path_info, delimiter=' p_i ', unpack=0, dictionary=0, find_mro=0)
+    get_view_at_console1(request.scheme, delimiter=' sc ', unpack=0, dictionary=0, find_mro=0)
     return JsonResponse({'status': 'ok', })
 
 
@@ -172,7 +183,7 @@ class UserViewSet(ModelViewSet):
 class SelectPollListAPIView(ListAPIView):
     model = Questionnaire
     queryset = model.objects.none()
-    serializer_class = SelectPollModelSerilaizer
+    serializer_class = ThinSelectPollModelSerilaizer
     permission_classes = (IsAuthenticatedOrReadOnly,)
 
     def get_queryset(self):
@@ -188,15 +199,84 @@ class SelectPollListAPIView(ListAPIView):
 # Далее сделатть обработчик-функцию, которая будет показывать выбранный
 # poll и даст возможность записаться на него post запросом
 # этот ниже убрать
-class SelectPollViewSet(ListCreateAPIView):
-    model = Questionnaire
-    queryset = Questionnaire.objects.all()
-    serializer_class = QuestionnaireModelSerializer
+@api_view(['GET', 'POST', ])
+@permission_classes([IsAuthenticated, ])
+def select_poll_view(request, pk):
+    user = request.user
+    kwargs = {
+        'model': Poll,
+        'pk': pk,
+        'start_date__lte': now,
+        'end_date__gte': now,
+    }
+    poll = get_object_or_null(**kwargs)
+    if poll:
+        if request.method == 'GET':
+            context = {'request': request, }
+            serializer = SelectPollModelSerilaizer(poll, context=context)
+            return Response(serializer.data, status=HTTP_200_OK)
 
-    def list(self, request, *args, **kwargs):
-        now = timezone.now()
-        user = request.user
-        questionnaires = list(Questionnaire.objects.filter(respondent=user))
-        polls = Poll.objects.exclude(questionnaires__in=questionnaires).filter(start_date__lte=now, end_date__gte=now)
-        serializer = SelectPollModelSerilaizer(polls, many=True)
-        return Response(serializer.data, status=HTTP_200_OK)
+        elif request.method == 'POST':
+            questionnaire = poll.questionnaires.filter(respondent=user)
+            if questionnaire.exists():
+                questionnaire = questionnaire.first()
+                # здесь послать в json url, который будет отвечать за опрос котрый уже проходится
+                if not questionnaire.completed:
+                    relative_url = reverse_lazy('api:questionnaire_questions_list',
+                                                kwargs={
+                                                    'questionnaire_id': questionnaire.pk,
+                                                })
+                    url = request.build_absolute_uri(relative_url)
+                    experiments(request=request)
+                    return Response({'status': 'Вы проходите этот опрос, но не закончили его',
+                                     'go_on_questionnaire': url, })
+                else:
+                    pass
+                    return Response({'status': 'Вы уже проходили этот опрос', })
+            else:
+                anonymous = request.POST.get('anonymous')
+                kwargs = {
+                    'poll': poll,
+                    'respondent': user,
+                    'anonymous': anonymous if anonymous else False,
+                }
+                questionnaire = Questionnaire.objects.create(**kwargs)
+                questionnaire_id = questionnaire.pk
+                # здесь послать в json url, который будет отвечать за опрос
+                relative_url = reverse_lazy('api:questionnaire_questions_list',
+                                            kwargs={
+                                                'questionnaire_id': questionnaire_id,
+                                            })
+                url = request.build_absolute_uri(relative_url)
+                data = {
+                    'status': 'Опрос начался',
+                    'questionnaire_id': questionnaire_id,
+                    'go_on_questionnaire': url,
+                }
+                return Response(data, status=HTTP_200_OK)
+    else:
+        return Response(status=HTTP_404_NOT_FOUND)
+
+
+class QuestionnairesListAPIView(ListAPIView):
+    model = Questionnaire
+    queryset = model.objects.none()
+    serializer_class = QuestionnaireModelSerializer
+    permission_classes = (IsAuthenticated,)
+
+    def get_queryset(self):
+        user = self.request.user
+        return self.model.objects.filter(respondent=user)
+
+
+# Временная функция - переделать. Нужно чтобы questionnaire удалялся с DELETE методом.
+@permission_classes([IsAuthenticated, ])
+def delete_questionnaire_view(request, pk, questionnaire_id):
+    if pk == request.user.pk:
+        questionnaire = get_object_or_null(Questionnaire, pk=questionnaire_id, respondent=pk)
+        if questionnaire:
+            questionnaire_id = questionnaire.pk
+            questionnaire.delete()
+            data = {'questionnaire_id': questionnaire_id, 'status': 'deleted', }
+            return Response(data, status=HTTP_200_OK)
+    return Response(status=HTTP_404_NOT_FOUND)

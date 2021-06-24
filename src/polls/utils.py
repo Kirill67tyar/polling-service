@@ -96,6 +96,6 @@ def get_view_at_console1(obj, delimiter='*', unpack=False, dictionary=False, fin
 
 
 def get_object_or_null(model, **kwargs):
-    if isinstance(model, QuerySet) or isinstance(model, BaseManager):
+    if isinstance(model, (QuerySet, BaseManager, )):
         return model.filter(**kwargs).first()
     return model.objects.filter(**kwargs).first()

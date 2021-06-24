@@ -7,7 +7,10 @@ from api.views import (UserViewSet,
                        QuestionDetailAPIView,
                        ChoiceViewSet,
                        QuestionViewSet,
-                       SelectPollListAPIView, )
+                       SelectPollListAPIView,
+                       QuestionnairesListAPIView,
+                       select_poll_view,
+                       delete_questionnaire_view, )
 
 app_name = 'api'
 
@@ -27,6 +30,13 @@ urlpatterns = [
     # --- users
     path('users/', UserViewSet.as_view(for_many_elements), name='users_list'),
     path('users/<int:pk>/', UserViewSet.as_view(for_one_element), name='user_detail'),
+    path('questionnaires/', QuestionnairesListAPIView.as_view(), name='questionnaires_list'),
+    path('questionnaires/<int:questionnaire_id>/',
+         select_poll_view, name='questionnaire_detail'),
+    path('questionnaires/<int:questionnaire_id>/questions/',
+         QuestionnairesListAPIView.as_view(), name='questionnaire_questions_list'),
+    path('questionnaires/<int:questionnaire_id>/delete/',
+         delete_questionnaire_view, name='questionnaire_delete'),
 
     # --- polls
     path('workspace/polls/', PollsListAPIView.as_view(), name='polls_list'),
@@ -53,5 +63,7 @@ urlpatterns = [
          ChoiceViewSet.as_view(for_one_element),
          name='choice_detail'),
 
-    path('polls/', SelectPollListAPIView.as_view(), name='select_poll_list')
+    path('polls/', SelectPollListAPIView.as_view(), name='select_poll_list'),
+    path('polls/<int:pk>/select/', select_poll_view, name='select_poll'),
+
 ]
