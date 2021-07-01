@@ -4,10 +4,11 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.reverse import reverse_lazy
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.viewsets import ModelViewSet, GenericViewSet
 from rest_framework.status import HTTP_200_OK, HTTP_404_NOT_FOUND
 from rest_framework.permissions import IsAdminUser, IsAuthenticatedOrReadOnly, IsAuthenticated
 from rest_framework.authentication import BasicAuthentication
+from rest_framework.mixins import ListModelMixin, RetrieveModelMixin, DestroyModelMixin
 from rest_framework.generics import (ListAPIView,
                                      ListCreateAPIView,
                                      RetrieveUpdateDestroyAPIView,
@@ -227,10 +228,11 @@ def select_poll_view(request, pk):
                                                     'questionnaire_id': questionnaire.pk,
                                                 })
                     url = request.build_absolute_uri(relative_url)
-                    experiments(request=request)
-                    return Response({'status': 'Вы проходите этот опрос, но не закончили его',
+                    # experiments(request=request)
+                    return Response({'status': 'Вы начали проходить этот опрос, но не закончили его',
                                      'go_on_questionnaire': url, })
                 else:
+                    # здесь добавить ссылку на удаление опроса !
                     pass
                     return Response({'status': 'Вы уже проходили этот опрос', })
             else:
@@ -249,7 +251,7 @@ def select_poll_view(request, pk):
                                             })
                 url = request.build_absolute_uri(relative_url)
                 data = {
-                    'status': 'Опрос начался',
+                    'status': f'Вы начали опрос "{poll.title}"',
                     'questionnaire_id': questionnaire_id,
                     'go_on_questionnaire': url,
                 }
@@ -257,26 +259,20 @@ def select_poll_view(request, pk):
     else:
         return Response(status=HTTP_404_NOT_FOUND)
 
-
-class QuestionnairesListAPIView(ListAPIView):
+# list, detail, delete questionnaire
+class QuestionnairesListRetrieveAPIView(RetrieveModelMixin,
+                                        DestroyModelMixin,
+                                        ListModelMixin,
+                                        GenericViewSet):
     model = Questionnaire
     queryset = model.objects.none()
     serializer_class = QuestionnaireModelSerializer
     permission_classes = (IsAuthenticated,)
+    http_method_names = ('get', 'delete', 'head', 'options', 'trace',)
 
     def get_queryset(self):
         user = self.request.user
         return self.model.objects.filter(respondent=user)
 
 
-# Временная функция - переделать. Нужно чтобы questionnaire удалялся с DELETE методом.
-@permission_classes([IsAuthenticated, ])
-def delete_questionnaire_view(request, pk, questionnaire_id):
-    if pk == request.user.pk:
-        questionnaire = get_object_or_null(Questionnaire, pk=questionnaire_id, respondent=pk)
-        if questionnaire:
-            questionnaire_id = questionnaire.pk
-            questionnaire.delete()
-            data = {'questionnaire_id': questionnaire_id, 'status': 'deleted', }
-            return Response(data, status=HTTP_200_OK)
-    return Response(status=HTTP_404_NOT_FOUND)
+

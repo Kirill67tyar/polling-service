@@ -8,9 +8,8 @@ from api.views import (UserViewSet,
                        ChoiceViewSet,
                        QuestionViewSet,
                        SelectPollListAPIView,
-                       QuestionnairesListAPIView,
-                       select_poll_view,
-                       delete_questionnaire_view, )
+                       QuestionnairesListRetrieveAPIView,
+                       select_poll_view, )
 
 app_name = 'api'
 
@@ -30,13 +29,17 @@ urlpatterns = [
     # --- users
     path('users/', UserViewSet.as_view(for_many_elements), name='users_list'),
     path('users/<int:pk>/', UserViewSet.as_view(for_one_element), name='user_detail'),
-    path('questionnaires/', QuestionnairesListAPIView.as_view(), name='questionnaires_list'),
-    path('questionnaires/<int:questionnaire_id>/',
-         select_poll_view, name='questionnaire_detail'),
+    path('questionnaires/', QuestionnairesListRetrieveAPIView.as_view({'get': 'list', }),
+         name='questionnaires_list'),
+    path('questionnaires/<int:pk>/',
+         QuestionnairesListRetrieveAPIView.as_view({'get': 'retrieve', 'delete': 'destroy', }),
+         name='questionnaire_detail'),
+
     path('questionnaires/<int:questionnaire_id>/questions/',
-         QuestionnairesListAPIView.as_view(), name='questionnaire_questions_list'),
-    path('questionnaires/<int:questionnaire_id>/delete/',
-         delete_questionnaire_view, name='questionnaire_delete'),
+         QuestionnairesListRetrieveAPIView.as_view({'get': 'list', }), name='questionnaire_questions_list'),
+
+    path('questionnaires/<int:questionnaire_id>/questions/<int:pk>/',
+         QuestionnairesListRetrieveAPIView.as_view({'get': 'list', }), name='questionnaire_question_detail'),
 
     # --- polls
     path('workspace/polls/', PollsListAPIView.as_view(), name='polls_list'),

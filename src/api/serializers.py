@@ -298,6 +298,7 @@ class SelectPollModelSerilaizer(ModelSerializer):
 class QuestionnaireModelSerializer(ModelSerializer):
     number_of_remaining_questions = SerializerMethodField(read_only=True)
     questions_list = SerializerMethodField(read_only=True)
+    questionnaire_detail = HyperlinkedIdentityField('api:questionnaire_detail')
 
     def get_number_of_remaining_questions(self, obj):
         if not obj.completed:
@@ -320,7 +321,8 @@ class QuestionnaireModelSerializer(ModelSerializer):
                   'anonymous',
                   'completed',
                   'number_of_remaining_questions',
-                  'questions_list',)
+                  'questions_list',
+                  'questionnaire_detail',)
         extra_kwargs = {
             'poll': {'read_only': True, },
             'respondent': {'read_only': True, },
@@ -328,6 +330,41 @@ class QuestionnaireModelSerializer(ModelSerializer):
             'quantity_questions': {'read_only': True, },
         }
 
+
 class QuestionnaireQuestionsModelSerializer(ModelSerializer):
+    choices = ChoiceModelSerializer(many=True, read_only=True)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.request = self.context.get('request')
+        self.questionnaire_id = self.request.get_full_path_info().split('/')[3]
+        questionnaire = get_object_or_null(Questionnaire, pk=self.questionnaire_id)
+        if questionnaire:
+            v_l = questionnaire.answers.values_list('question_id', 'pk')
+
+            # словарь, где ключ это id вопроса, а его значение это id ответа
+            # в конкретном опроснике, если он есть:
+            self.questions_keys_answers_values = {item[0]: item[-1] for item in v_l}
+        else:
+            raise ValidationError('404')
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        pk = instance.pk
+        if pk in self.questions_keys_answers_values.keys():
+            relative_url = reverse_lazy('api:questionnaire_question_detail', kwargs={
+                'questionnaire_id': self.questionnaire_id,
+                'pk': self.questions_keys_answers_values[pk],
+            })
+            absolute_url = self.request.build_absolute_uri(relative_url)
+            ret['change_answer'] = absolute_url
+        else:
+            # дополнить здесь как довать ответ, новерно дополнительный url нужно создавать
+            ret['give_an_answer'] = None
+            pass
+
+        return ret
+
     class Meta:
-        pass
+        model = Question
+        fields = ('id', 'title', 'type_question', 'choices',)
