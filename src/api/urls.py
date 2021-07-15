@@ -9,7 +9,8 @@ from api.views import (UserViewSet,
                        QuestionViewSet,
                        SelectPollListAPIView,
                        QuestionnairesListRetrieveAPIView,
-                       select_poll_view, )
+                       select_poll_view,
+                       questionnaire_questions_view, )
 
 app_name = 'api'
 
@@ -26,7 +27,7 @@ for_one_element = {
 }
 
 urlpatterns = [
-    # --- users
+    # --- USERS
     path('users/', UserViewSet.as_view(for_many_elements), name='users_list'),
     path('users/<int:pk>/', UserViewSet.as_view(for_one_element), name='user_detail'),
     path('questionnaires/', QuestionnairesListRetrieveAPIView.as_view({'get': 'list', }),
@@ -35,17 +36,23 @@ urlpatterns = [
          QuestionnairesListRetrieveAPIView.as_view({'get': 'retrieve', 'delete': 'destroy', }),
          name='questionnaire_detail'),
 
+    # ниже questionnaires не закончены
     path('questionnaires/<int:questionnaire_id>/questions/',
-         QuestionnairesListRetrieveAPIView.as_view({'get': 'list', }), name='questionnaire_questions_list'),
+         questionnaire_questions_view, name='questionnaire_questions_list'),
 
-    path('questionnaires/<int:questionnaire_id>/questions/<int:pk>/',
-         QuestionnairesListRetrieveAPIView.as_view({'get': 'list', }), name='questionnaire_question_detail'),
+    path('questionnaires/<int:questionnaire_id>/questions/<int:pk>/give-an-answer/',
+         QuestionnairesListRetrieveAPIView.as_view({'get': 'list', }), name='questionnaire_questions_give_answer'),
 
-    # --- polls
+    path('questionnaires/<int:questionnaire_id>/answers/<int:pk>/',
+         QuestionnairesListRetrieveAPIView.as_view({'get': 'list', }), name='questionnaire_answers_list'),
+    path('questionnaires/<int:questionnaire_id>/answers/<int:pk>/',
+         QuestionnairesListRetrieveAPIView.as_view({'get': 'list', }), name='questionnaire_answer_detail'),
+
+    # --- POLLS
     path('workspace/polls/', PollsListAPIView.as_view(), name='polls_list'),
     path('workspace/polls/<int:pk>/', PollDetailAPIView.as_view(), name='poll_detail'),
 
-    # --- questions
+    # --- QUESTIONS
     # APIView
     # path('workspace/polls/<int:poll_id>/questions/', QuestionsListAPIView.as_view(), name='questions_list'),
     # path('workspace/polls/<int:poll_id>/questions/<int:pk>/',
@@ -58,7 +65,7 @@ urlpatterns = [
          QuestionViewSet.as_view(for_one_element),
          name='question_detail'),
 
-    # --- choices
+    # --- CHOICES
     path('workspace/polls/<int:poll_id>/questions/<int:question_id>/choices/',
          ChoiceViewSet.as_view(for_many_elements),
          name='choices_list'),

@@ -3,7 +3,7 @@ from collections import OrderedDict
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.reverse import reverse_lazy
+from rest_framework.reverse import reverse_lazy as r_l
 from rest_framework.viewsets import ModelViewSet, GenericViewSet
 from rest_framework.status import HTTP_200_OK, HTTP_404_NOT_FOUND
 from rest_framework.permissions import IsAdminUser, IsAuthenticatedOrReadOnly, IsAuthenticated
@@ -20,7 +20,7 @@ from django.contrib.auth import get_user_model
 from django.views.generic import ListView, CreateView
 
 from polls.models import Poll, Question, Choice, Questionnaire, Answer
-from polls.utils import get_view_at_console1, get_object_or_null
+from polls.utils import get_view_at_console1, get_object_or_null, built_absolute_URL
 from api.permissions import (MyIsAdminUser, IsOwnerOrAdmin,
                              StartDateNotCreatedOrReadOnly, )
 from api.serializers import (UserSerializer, ThinUserSerializers,
@@ -30,7 +30,8 @@ from api.serializers import (UserSerializer, ThinUserSerializers,
                              ExperimentThinChoiceModelSerializer,
                              SelectPollModelSerilaizer,
                              ThinSelectPollModelSerilaizer,
-                             QuestionnaireModelSerializer, )
+                             QuestionnaireModelSerializer,
+                             QuestionnaireQuestionsModelSerializer)
 
 now = timezone.now()
 
@@ -197,9 +198,8 @@ class SelectPollListAPIView(ListAPIView):
         return qs
 
 
-# Далее сделатть обработчик-функцию, которая будет показывать выбранный
+# Далее сделать обработчик-функцию, которая будет показывать выбранный
 # poll и даст возможность записаться на него post запросом
-# этот ниже убрать
 @api_view(['GET', 'POST', ])
 @permission_classes([IsAuthenticated, ])
 def select_poll_view(request, pk):
@@ -221,13 +221,10 @@ def select_poll_view(request, pk):
             questionnaire = poll.questionnaires.filter(respondent=user)
             if questionnaire.exists():
                 questionnaire = questionnaire.first()
-                # здесь послать в json url, который будет отвечать за опрос котрый уже проходится
                 if not questionnaire.completed:
-                    relative_url = reverse_lazy('api:questionnaire_questions_list',
-                                                kwargs={
-                                                    'questionnaire_id': questionnaire.pk,
-                                                })
-                    url = request.build_absolute_uri(relative_url)
+                    url = built_absolute_URL(request=request,
+                                             viewname='api:questionnaire_questions_list',
+                                             questionnaire_id=questionnaire.pk)
                     # experiments(request=request)
                     return Response({'status': 'Вы начали проходить этот опрос, но не закончили его',
                                      'go_on_questionnaire': url, })
@@ -244,12 +241,9 @@ def select_poll_view(request, pk):
                 }
                 questionnaire = Questionnaire.objects.create(**kwargs)
                 questionnaire_id = questionnaire.pk
-                # здесь послать в json url, который будет отвечать за опрос
-                relative_url = reverse_lazy('api:questionnaire_questions_list',
-                                            kwargs={
-                                                'questionnaire_id': questionnaire_id,
-                                            })
-                url = request.build_absolute_uri(relative_url)
+                url = built_absolute_URL(request=request,
+                                         viewname='api:questionnaire_questions_list',
+                                         questionnaire_id=questionnaire_id)
                 data = {
                     'status': f'Вы начали опрос "{poll.title}"',
                     'questionnaire_id': questionnaire_id,
@@ -275,4 +269,30 @@ class QuestionnairesListRetrieveAPIView(RetrieveModelMixin,
         return self.model.objects.filter(respondent=user)
 
 
+# нужно сделать так, чтобы выдавался список вопросов, с дополнительным полем в каждом из них
+# есть ли ответ на вопрос, или нет
+# если ответ есть, и опросник не закончен, то добавить возможность изменить ответ
+# поле (change_answer) ссылке на измнение ответа
+# если овтета нет, то добавить поле give_answer - ссылку на то, чтобы дать ответ.
+# Далее, если опросник завершен, то изменять ответы нельзя.
 
+# Если опросник закончился по дате, то и опросник заново перепроходить нельзя,
+# но это уже нюансы.
+
+"""
+'questionnaires/<int:questionnaire_id>/questions/'
+"""
+@api_view(['GET',])
+@permission_classes([IsAuthenticated, ])
+def questionnaire_questions_view(request, questionnaire_id):
+    questionnaire = get_object_or_null(Questionnaire, pk=questionnaire_id)
+    user = request.user
+    if questionnaire and questionnaire.respondent == user:
+        poll_id = questionnaire.poll.pk
+        poll = get_object_or_null(Poll, pk=poll_id)
+        questions = poll.questions.all()
+        context = {'request': request,}
+        serializer = QuestionnaireQuestionsModelSerializer(questions, many=True, context=context)
+        return Response(serializer.data, status=HTTP_200_OK)
+    else:
+        return Response(status=HTTP_404_NOT_FOUND)

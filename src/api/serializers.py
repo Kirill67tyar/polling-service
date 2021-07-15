@@ -10,9 +10,9 @@ from rest_framework.reverse import reverse_lazy
 from rest_framework.exceptions import ValidationError
 from rest_framework.fields import SerializerMethodField
 from rest_framework.relations import HyperlinkedIdentityField
-from rest_framework.serializers import ModelSerializer, Serializer, CharField
+from rest_framework.serializers import ModelSerializer, Serializer, CharField, IntegerField
 
-from polls.utils import get_view_at_console1, get_object_or_null, my_custom_slugify
+from polls.utils import get_view_at_console1, get_object_or_null, my_custom_slugify, built_absolute_URL
 from polls.models import Poll, Question, Choice, Questionnaire, Answer
 
 
@@ -330,9 +330,15 @@ class QuestionnaireModelSerializer(ModelSerializer):
             'quantity_questions': {'read_only': True, },
         }
 
+class QuestionnaireQuestionChoicesSerializer(ModelSerializer):
+
+    class Meta:
+        model = Choice
+        fields = ('id', 'title',)
 
 class QuestionnaireQuestionsModelSerializer(ModelSerializer):
-    choices = ChoiceModelSerializer(many=True, read_only=True)
+
+    choices = QuestionnaireQuestionChoicesSerializer(many=True, read_only=True)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -350,19 +356,20 @@ class QuestionnaireQuestionsModelSerializer(ModelSerializer):
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
-        pk = instance.pk
-        if pk in self.questions_keys_answers_values.keys():
-            relative_url = reverse_lazy('api:questionnaire_question_detail', kwargs={
-                'questionnaire_id': self.questionnaire_id,
-                'pk': self.questions_keys_answers_values[pk],
-            })
-            absolute_url = self.request.build_absolute_uri(relative_url)
+        question_id = instance.pk
+
+        if question_id in self.questions_keys_answers_values.keys():
+            absolute_url = built_absolute_URL(request=self.request,
+                                              viewname='api:questionnaire_answer_detail',
+                                              questionnaire_id=self.questionnaire_id,
+                                              pk=self.questions_keys_answers_values[question_id])
             ret['change_answer'] = absolute_url
         else:
-            # дополнить здесь как довать ответ, новерно дополнительный url нужно создавать
-            ret['give_an_answer'] = None
-            pass
-
+            absolute_url = built_absolute_URL(request=self.request,
+                                              viewname='api:questionnaire_questions_give_answer',
+                                              questionnaire_id=self.questionnaire_id,
+                                              pk=question_id)
+            ret['give_an_answer'] = absolute_url
         return ret
 
     class Meta:

@@ -1,5 +1,7 @@
+from django.urls import reverse_lazy
 from django.db.models.query import QuerySet
 from django.db.models.manager import BaseManager
+
 
 cyrillic_letters = {
     u'а': u'a',
@@ -99,3 +101,10 @@ def get_object_or_null(model, **kwargs):
     if isinstance(model, (QuerySet, BaseManager, )):
         return model.filter(**kwargs).first()
     return model.objects.filter(**kwargs).first()
+
+
+def built_absolute_URL(request, viewname, *args, **kwargs):
+    relative_url = reverse_lazy(viewname,
+                                args=args,
+                                kwargs=kwargs)
+    return request.build_absolute_uri(relative_url)
