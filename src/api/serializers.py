@@ -15,12 +15,15 @@ from rest_framework.serializers import ModelSerializer, Serializer, CharField, I
 from polls.utils import get_view_at_console1, get_object_or_null, my_custom_slugify, built_absolute_URL
 from polls.models import Poll, Question, Choice, Questionnaire, Answer
 
-
 # https://www.django-rest-framework.org/api-guide/fields/
 # https://www.django-rest-framework.org/api-guide/serializers/
 
 # !!! когда будешь пилить сериализаторы для user прочти статью:
 # https://www.django-rest-framework.org/api-guide/fields/#choice-selection-fields
+
+
+NOW = timezone.now()
+
 
 # vvv=================vvv==================vvv  WORKSPACE  vvv================vvv=================vvv
 def check_poll_data(validated_data):
@@ -330,14 +333,14 @@ class QuestionnaireModelSerializer(ModelSerializer):
             'quantity_questions': {'read_only': True, },
         }
 
-class QuestionnaireQuestionChoicesSerializer(ModelSerializer):
 
+class QuestionnaireQuestionChoicesSerializer(ModelSerializer):
     class Meta:
         model = Choice
         fields = ('id', 'title',)
 
-class QuestionnaireQuestionsModelSerializer(ModelSerializer):
 
+class QuestionnaireQuestionsModelSerializer(ModelSerializer):
     choices = QuestionnaireQuestionChoicesSerializer(many=True, read_only=True)
 
     def __init__(self, *args, **kwargs):
@@ -351,25 +354,26 @@ class QuestionnaireQuestionsModelSerializer(ModelSerializer):
             # словарь, где ключ это id вопроса, а его значение это id ответа
             # в конкретном опроснике, если он есть:
             self.questions_keys_answers_values = {item[0]: item[-1] for item in v_l}
+            self.fresh_poll = questionnaire.poll.start_date < NOW < questionnaire.poll.end_date
         else:
             raise ValidationError('404')
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
         question_id = instance.pk
-
-        if question_id in self.questions_keys_answers_values.keys():
-            absolute_url = built_absolute_URL(request=self.request,
-                                              viewname='api:questionnaire_answer_detail',
-                                              questionnaire_id=self.questionnaire_id,
-                                              pk=self.questions_keys_answers_values[question_id])
-            ret['change_answer'] = absolute_url
-        else:
-            absolute_url = built_absolute_URL(request=self.request,
-                                              viewname='api:questionnaire_questions_give_answer',
-                                              questionnaire_id=self.questionnaire_id,
-                                              pk=question_id)
-            ret['give_an_answer'] = absolute_url
+        if self.fresh_poll:
+            if question_id in self.questions_keys_answers_values.keys():
+                absolute_url = built_absolute_URL(request=self.request,
+                                                  viewname='api:change_answer',
+                                                  questionnaire_id=self.questionnaire_id,
+                                                  answer_id=self.questions_keys_answers_values[question_id])
+                ret['change_answer'] = absolute_url
+            else:
+                absolute_url = built_absolute_URL(request=self.request,
+                                                  viewname='api:give_answer',
+                                                  questionnaire_id=self.questionnaire_id,
+                                                  question_id=question_id)
+                ret['give_an_answer'] = absolute_url
         return ret
 
     class Meta:

@@ -33,7 +33,7 @@ from api.serializers import (UserSerializer, ThinUserSerializers,
                              QuestionnaireModelSerializer,
                              QuestionnaireQuestionsModelSerializer)
 
-now = timezone.now()
+NOW = timezone.now()
 
 
 def experiments(request):
@@ -190,8 +190,8 @@ class SelectPollListAPIView(ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        get_view_at_console1(now)
-        qs = Poll.objects.filter(start_date__lte=now, end_date__gte=now)
+        get_view_at_console1(NOW)
+        qs = Poll.objects.filter(start_date__lte=NOW, end_date__gte=NOW)
         if user.is_authenticated:
             questionnaires = list(Questionnaire.objects.filter(respondent=user))
             return qs.exclude(questionnaires__in=questionnaires)
@@ -207,8 +207,8 @@ def select_poll_view(request, pk):
     kwargs = {
         'model': Poll,
         'pk': pk,
-        'start_date__lte': now,
-        'end_date__gte': now,
+        'start_date__lte': NOW,
+        'end_date__gte': NOW,
     }
     poll = get_object_or_null(**kwargs)
     if poll:
@@ -253,6 +253,7 @@ def select_poll_view(request, pk):
     else:
         return Response(status=HTTP_404_NOT_FOUND)
 
+
 # list, detail, delete questionnaire
 class QuestionnairesListRetrieveAPIView(RetrieveModelMixin,
                                         DestroyModelMixin,
@@ -282,17 +283,60 @@ class QuestionnairesListRetrieveAPIView(RetrieveModelMixin,
 """
 'questionnaires/<int:questionnaire_id>/questions/'
 """
-@api_view(['GET',])
+
+
+@api_view(['GET', ])
 @permission_classes([IsAuthenticated, ])
 def questionnaire_questions_view(request, questionnaire_id):
-    questionnaire = get_object_or_null(Questionnaire, pk=questionnaire_id)
     user = request.user
-    if questionnaire and questionnaire.respondent == user:
+    questionnaire = get_object_or_null(Questionnaire, pk=questionnaire_id, respondent=user)
+    if questionnaire:
         poll_id = questionnaire.poll.pk
         poll = get_object_or_null(Poll, pk=poll_id)
         questions = poll.questions.all()
-        context = {'request': request,}
+        context = {'request': request, }
         serializer = QuestionnaireQuestionsModelSerializer(questions, many=True, context=context)
         return Response(serializer.data, status=HTTP_200_OK)
     else:
         return Response(status=HTTP_404_NOT_FOUND)
+
+
+"""
+для give_answer
+1 - проверить что опрос, еще действительный по дате
+2 - проверить что ответа на этот вопрос еще не дано
+3 - проверить что опросник не закончен (все ответы даны). 
+Если ответа на этот вопрос нет, то и опросник не закончен, поэтому 3й пункт можно опустить.
+4 - сделать запрос в бд, достать вопрос, который соответствует опросу, и ссылке
+"""
+
+@api_view(['GET', 'POST', ])
+@permission_classes([IsAuthenticated, ])
+def give_answer_view(request, questionnaire_id, question_id):
+    user = request.user
+    questionnaire = get_object_or_null(Questionnaire, pk=questionnaire_id, respondent=user)
+    if questionnaire:
+        poll = questionnaire.poll
+        if poll.start_date < NOW < poll.end_date:
+            question = poll.questions.filter(pk=question_id)
+            if question.exists():
+                question = question.first()
+                if not question.answers.filter(questionnaire=questionnaire).exists():
+                    # поместить question в сериалайзер (который еще не написан)
+                    # и отправить пользователю с статус кодом 200
+                    # а возможно здесь проверить на get запрос и post запрос
+                    pass
+                else:
+                    # перенаправить на change_answer
+                    pass
+            pass
+        pass
+    else:
+        return Response(status=HTTP_404_NOT_FOUND)
+
+
+
+@api_view(['GET', 'PUT', ])
+@permission_classes([IsAuthenticated, ])
+def change_answer_view(request, questionnaire_id, answer_id):
+    pass

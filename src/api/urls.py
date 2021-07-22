@@ -10,7 +10,9 @@ from api.views import (UserViewSet,
                        SelectPollListAPIView,
                        QuestionnairesListRetrieveAPIView,
                        select_poll_view,
-                       questionnaire_questions_view, )
+                       questionnaire_questions_view,
+                       give_answer_view,
+                       change_answer_view, )
 
 app_name = 'api'
 
@@ -35,18 +37,13 @@ urlpatterns = [
     path('questionnaires/<int:pk>/',
          QuestionnairesListRetrieveAPIView.as_view({'get': 'retrieve', 'delete': 'destroy', }),
          name='questionnaire_detail'),
-
-    # ниже questionnaires не закончены
     path('questionnaires/<int:questionnaire_id>/questions/',
          questionnaire_questions_view, name='questionnaire_questions_list'),
 
-    path('questionnaires/<int:questionnaire_id>/questions/<int:pk>/give-an-answer/',
-         QuestionnairesListRetrieveAPIView.as_view({'get': 'list', }), name='questionnaire_questions_give_answer'),
-
-    path('questionnaires/<int:questionnaire_id>/answers/<int:pk>/',
-         QuestionnairesListRetrieveAPIView.as_view({'get': 'list', }), name='questionnaire_answers_list'),
-    path('questionnaires/<int:questionnaire_id>/answers/<int:pk>/',
-         QuestionnairesListRetrieveAPIView.as_view({'get': 'list', }), name='questionnaire_answer_detail'),
+    path('questionnaires/<int:questionnaire_id>/questions/<int:question_id>/give-an-answer/',
+         give_answer_view, name='give_answer'),
+    path('questionnaires/<int:questionnaire_id>/answers/<int:answer_id>/change-answer/',
+         change_answer_view, name='change_answer'),
 
     # --- POLLS
     path('workspace/polls/', PollsListAPIView.as_view(), name='polls_list'),
