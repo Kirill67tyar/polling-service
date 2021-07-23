@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.reverse import reverse_lazy as r_l
 from rest_framework.viewsets import ModelViewSet, GenericViewSet
-from rest_framework.status import HTTP_200_OK, HTTP_404_NOT_FOUND
+from rest_framework.status import HTTP_200_OK, HTTP_404_NOT_FOUND, HTTP_400_BAD_REQUEST
 from rest_framework.permissions import IsAdminUser, IsAuthenticatedOrReadOnly, IsAuthenticated
 from rest_framework.authentication import BasicAuthentication
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin, DestroyModelMixin
@@ -310,6 +310,7 @@ def questionnaire_questions_view(request, questionnaire_id):
 4 - сделать запрос в бд, достать вопрос, который соответствует опросу, и ссылке
 """
 
+
 @api_view(['GET', 'POST', ])
 @permission_classes([IsAuthenticated, ])
 def give_answer_view(request, questionnaire_id, question_id):
@@ -325,7 +326,39 @@ def give_answer_view(request, questionnaire_id, question_id):
                     # поместить question в сериалайзер (который еще не написан)
                     # и отправить пользователю с статус кодом 200
                     # а возможно здесь проверить на get запрос и post запрос
-                    pass
+                    if request.method == 'GET':
+                        context = {'request': request, }
+                        serializer = QuestionnaireQuestionsModelSerializer(question, context=context)
+                        return Response(serializer.data, status=HTTP_200_OK)
+                    # Если post-запрос:
+                    else:
+                        type_question = question.type_question
+                        if type_question in ('checkbox', 'radio',):
+                            question_choices_ids = set(question.choices.values_list('pk', flat=True))
+                            answer_choices_ids = set(request.data)
+                            if answer_choices_ids and answer_choices_ids.issubset(question_choices_ids):
+                                if type_question == 'checkbox':
+                                    answer = Answer.objects.create(questionnaire=questionnaire, question=question)
+                                    answer_choices_qs = list(Answer.objects.filter(pk__in=answer_choices_ids))
+                                    answer.checkbox.add(*answer_choices_qs)
+
+
+                                # если тип вопроса - radio
+                                elif type_question == 'radio' and len(answer_choices) == 1:
+                                    answer = Answer.objects.create(questionnaire=questionnaire,
+                                                                   question=question,
+                                                                   radio=list(answer_choices)[0])
+                                else:
+                                    return Response(status=HTTP_400_BAD_REQUEST)
+                            else:
+                                return Response(status=HTTP_400_BAD_REQUEST)
+
+                        # если тип вопроса - text
+                        else:
+                            pass
+
+                        # здесь POST метод, нужно учитывать тип вопроса.
+
                 else:
                     # перенаправить на change_answer
                     pass
@@ -335,8 +368,12 @@ def give_answer_view(request, questionnaire_id, question_id):
         return Response(status=HTTP_404_NOT_FOUND)
 
 
-
 @api_view(['GET', 'PUT', ])
 @permission_classes([IsAuthenticated, ])
 def change_answer_view(request, questionnaire_id, answer_id):
-    pass
+    user = request.user
+    questionnaire = get_object_or_null(Questionnaire, pk=questionnaire_id, respondent=user)
+    if questionnaire:
+        pass
+    else:
+        return Response(status=HTTP_404_NOT_FOUND)

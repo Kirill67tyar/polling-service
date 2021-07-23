@@ -346,7 +346,8 @@ class QuestionnaireQuestionsModelSerializer(ModelSerializer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.request = self.context.get('request')
-        self.questionnaire_id = self.request.get_full_path_info().split('/')[3]
+        self.url_parts = self.request.get_full_path_info().split('/')
+        self.questionnaire_id = self.url_parts[3]
         questionnaire = get_object_or_null(Questionnaire, pk=self.questionnaire_id)
         if questionnaire:
             v_l = questionnaire.answers.values_list('question_id', 'pk')
@@ -361,7 +362,7 @@ class QuestionnaireQuestionsModelSerializer(ModelSerializer):
     def to_representation(self, instance):
         ret = super().to_representation(instance)
         question_id = instance.pk
-        if self.fresh_poll:
+        if self.fresh_poll and 'give-an-answer' not in self.url_parts:
             if question_id in self.questions_keys_answers_values.keys():
                 absolute_url = built_absolute_URL(request=self.request,
                                                   viewname='api:change_answer',
