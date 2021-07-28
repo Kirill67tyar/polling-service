@@ -346,23 +346,26 @@ class QuestionnaireQuestionsModelSerializer(ModelSerializer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.request = self.context.get('request')
-        self.url_parts = self.request.get_full_path_info().split('/')
-        self.questionnaire_id = self.url_parts[3]
-        questionnaire = get_object_or_null(Questionnaire, pk=self.questionnaire_id)
-        if questionnaire:
-            v_l = questionnaire.answers.values_list('question_id', 'pk')
+        self.fresh_poll = False
+        if self.request:
+            self.url_parts = self.request.get_full_path_info().split('/')
+            self.questionnaire_id = self.url_parts[3]
+            questionnaire = get_object_or_null(Questionnaire, pk=self.questionnaire_id)
+            if questionnaire:
+                v_l = questionnaire.answers.values_list('question_id', 'pk')
 
-            # словарь, где ключ это id вопроса, а его значение это id ответа
-            # в конкретном опроснике, если он есть:
-            self.questions_keys_answers_values = {item[0]: item[-1] for item in v_l}
-            self.fresh_poll = questionnaire.poll.start_date < NOW < questionnaire.poll.end_date
-        else:
-            raise ValidationError('404')
+                # словарь, где ключ это id вопроса, а его значение это id ответа
+                # в конкретном опроснике, если он есть:
+                self.questions_keys_answers_values = {item[0]: item[-1] for item in v_l}
+                self.fresh_poll = questionnaire.poll.start_date < NOW < questionnaire.poll.end_date
+            else:
+                raise ValidationError('404')
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
         question_id = instance.pk
-        if self.fresh_poll and 'give-an-answer' not in self.url_parts:
+        if self.fresh_poll and {'give-an-answer', 'change-answer'}.isdisjoint(self.url_parts):
+            # if ('give-an-answer' not in self.url_parts and 'change-answer' not in self.url_parts):
             if question_id in self.questions_keys_answers_values.keys():
                 absolute_url = built_absolute_URL(request=self.request,
                                                   viewname='api:change_answer',
@@ -380,3 +383,22 @@ class QuestionnaireQuestionsModelSerializer(ModelSerializer):
     class Meta:
         model = Question
         fields = ('id', 'title', 'type_question', 'choices',)
+
+
+class QuestionnaireAnswersSerializer(ModelSerializer):
+    question = QuestionnaireQuestionsModelSerializer(read_only=True)
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        type_question = instance.question.type_question
+        if type_question == 'checkbox':
+            ret['answer'] = instance.checkbox.values_list('pk', flat=True)
+        elif type_question == 'radio':
+            ret['answer'] = [instance.radio.pk]
+        else:
+            ret['answer'] = instance.text
+        return ret
+
+    class Meta:
+        model = Answer
+        fields = ('question', 'questionnaire_id', 'id',)

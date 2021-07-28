@@ -31,7 +31,8 @@ from api.serializers import (UserSerializer, ThinUserSerializers,
                              SelectPollModelSerilaizer,
                              ThinSelectPollModelSerilaizer,
                              QuestionnaireModelSerializer,
-                             QuestionnaireQuestionsModelSerializer)
+                             QuestionnaireQuestionsModelSerializer,
+                             QuestionnaireAnswersSerializer)
 
 NOW = timezone.now()
 
@@ -323,9 +324,6 @@ def give_answer_view(request, questionnaire_id, question_id):
             if question.exists():
                 question = question.first()
                 if not question.answers.filter(questionnaire=questionnaire).exists():
-                    # поместить question в сериалайзер (который еще не написан)
-                    # и отправить пользователю с статус кодом 200
-                    # а возможно здесь проверить на get запрос и post запрос
                     if request.method == 'GET':
                         context = {'request': request, }
                         serializer = QuestionnaireQuestionsModelSerializer(question, context=context)
@@ -335,35 +333,57 @@ def give_answer_view(request, questionnaire_id, question_id):
                         type_question = question.type_question
                         if type_question in ('checkbox', 'radio',):
                             question_choices_ids = set(question.choices.values_list('pk', flat=True))
-                            answer_choices_ids = set(request.data)
+                            answer_choices_ids = set(request.data['answer'])
                             if answer_choices_ids and answer_choices_ids.issubset(question_choices_ids):
                                 if type_question == 'checkbox':
                                     answer = Answer.objects.create(questionnaire=questionnaire, question=question)
-                                    answer_choices_qs = list(Answer.objects.filter(pk__in=answer_choices_ids))
-                                    answer.checkbox.add(*answer_choices_qs)
-
+                                    choices_qs = list(Choice.objects.filter(pk__in=answer_choices_ids))
+                                    answer.checkbox.add(*choices_qs)
+                                    return Response({'status': 'answer accepted'}, status=HTTP_200_OK)
 
                                 # если тип вопроса - radio
-                                elif type_question == 'radio' and len(answer_choices) == 1:
-                                    answer = Answer.objects.create(questionnaire=questionnaire,
-                                                                   question=question,
-                                                                   radio=list(answer_choices)[0])
+                                elif type_question == 'radio' and len(answer_choices_ids) == 1:
+                                    answer_choice_for_radio = list(Choice.objects.filter(pk__in=answer_choices_ids))[0]
+                                    Answer.objects.create(questionnaire=questionnaire,
+                                                          question=question,
+                                                          radio=answer_choice_for_radio)
+                                    return Response({'status': 'answer accepted'}, status=HTTP_200_OK)
                                 else:
                                     return Response(status=HTTP_400_BAD_REQUEST)
                             else:
                                 return Response(status=HTTP_400_BAD_REQUEST)
 
                         # если тип вопроса - text
-                        else:
-                            pass
+                        elif type_question == 'text':
+                            kwargs = {
+                                'questionnaire': questionnaire,
+                                'question': question,
+                                'text': request.data['answer'],
+                            }
+                            Answer.objects.create(**kwargs)
+                            return Response({'status': 'answer accepted'}, status=HTTP_200_OK)
 
-                        # здесь POST метод, нужно учитывать тип вопроса.
+                        # если тип вопроса не checkbox/radio/text:
+                        else:
+                            return Response(status=HTTP_400_BAD_REQUEST)
 
                 else:
-                    # перенаправить на change_answer
-                    pass
-            pass
-        pass
+                    # перенаправляет на change_answer
+                    answer_id = question.answers.filter(questionnaire=questionnaire).first().pk
+                    kwargs = {
+                        'request': request,
+                        'viewname': 'api:change_answer',
+                        'questionnaire_id': questionnaire_id,
+                        'answer_id': answer_id,
+                    }
+                    url_to_change_answer = built_absolute_URL(**kwargs)
+                    # можно прямо здесь редирект устроить, а можно послать url на редирект
+                    return Response({'status': 'the answer has already been',
+                                     'change_answer': url_to_change_answer, }, status=HTTP_200_OK)
+            else:
+                return Response(status=HTTP_404_NOT_FOUND)
+        else:
+            return Response(status=HTTP_404_NOT_FOUND)
     else:
         return Response(status=HTTP_404_NOT_FOUND)
 
@@ -374,6 +394,34 @@ def change_answer_view(request, questionnaire_id, answer_id):
     user = request.user
     questionnaire = get_object_or_null(Questionnaire, pk=questionnaire_id, respondent=user)
     if questionnaire:
-        pass
+        poll = questionnaire.poll
+        if poll.start_date < NOW < poll.end_date:
+            answer_qs = Answer.objects.filter(pk=answer_id)
+            if answer_qs.exists():
+                answer = answer_qs.first()
+                if answer.questionnaire.pk == questionnaire_id:
+                    kwargs = {
+                        'instance': answer,
+                        'context': {
+                            'request': request,
+                        },
+                    }
+                    serializer = QuestionnaireAnswersSerializer(**kwargs)
+                    return Response(serializer.data, status=HTTP_200_OK)
+                else:
+                    pass
+
+            else:
+                pass
+        else:
+            pass
     else:
         return Response(status=HTTP_404_NOT_FOUND)
+
+
+"""
+{"answer": [1,3]}
+text = TextField(blank=True, null=True)
+    radio = ForeignKey(to=Choice, on_delete=CASCADE, blank=True, null=True)
+    checkbox
+"""
